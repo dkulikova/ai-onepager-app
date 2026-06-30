@@ -23,7 +23,7 @@ BASE = Path(__file__).parent
 def resolve_db_path() -> Path:
     """Support both foldered repos and flat GitHub uploads."""
     candidates = [
-        BASE / "data" / "briefing_demo.db",
+        BASE / "briefing_demo.db",
         BASE / "briefing_demo.db",
     ]
     for candidate in candidates:
