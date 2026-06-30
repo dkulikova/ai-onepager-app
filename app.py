@@ -694,16 +694,6 @@ with col1:
     with st.expander("View database record"):
         st.dataframe(pd.DataFrame(selected_company).rename(columns={0: "value"}))
 
-    with st.expander("View latest articles retrieved"):
-        for article in latest_articles:
-            st.markdown(f"**{article.get('title', '')}**")
-            if article.get("published"):
-                st.caption(article.get("published"))
-            if article.get("summary"):
-                st.write(article.get("summary"))
-            if article.get("link"):
-                st.write(article.get("link"))
-
 with col2:
     st.subheader("2. Add extra context")
     extra_notes = st.text_area(
@@ -719,6 +709,20 @@ query = f"{company_name} {project_name} {extra_notes}"
 retrieved_notes = retrieve_relevant_notes(query, notes)
 latest_articles = get_latest_company_articles(company_name, max_articles=5)
 source_pack = build_source_pack(selected_company, selected_project, extra_notes, retrieved_notes, latest_articles)
+
+with st.expander("View latest articles retrieved"):
+    if latest_articles:
+        for article in latest_articles:
+            st.markdown(f"**{article.get('title', '')}**")
+            if article.get("published"):
+                st.caption(article.get("published"))
+            if article.get("summary"):
+                st.write(article.get("summary"))
+            if article.get("link"):
+                st.write(article.get("link"))
+            st.divider()
+    else:
+        st.write("No latest articles retrieved for this company.")
 
 st.subheader("3. Generate output")
 st.write("This runs a simple chain: retrieve context → draft structured profile → review draft → export editable PowerPoint.")
