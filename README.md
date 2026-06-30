@@ -6,15 +6,17 @@ A lightweight Streamlit prototype that turns structured company data, Markdown/O
 
 - Structured data access from a local SQLite database
 - Unstructured note retrieval from Markdown files
+- Automatic latest-news retrieval from Google News RSS for the selected company
 - LLM-powered structured drafting
 - Review step for unsupported claims and missing information
 - Downloadable single-slide `.pptx` output using a preset company-profile template
+- Fixed “Latest news / recent signals” section in the one-pager
 
 ## Main files
 
 - `app.py` — the Streamlit app and PowerPoint generation logic
 - `setup_demo_data.py` — creates the demo SQLite database and sample notes
-- `requirements.txt` — Python dependencies for Streamlit Cloud
+- `requirements.txt` — Python dependencies for Streamlit Cloud, including `feedparser` for RSS retrieval
 - `briefing_demo.db` — flat-upload copy of the demo SQLite database
 - `openai.md`, `anthropic.md` and `mistral_ai.md` — flat-upload copies of the demo notes
 - `data/briefing_demo.db` — foldered copy of the demo SQLite database
@@ -54,7 +56,7 @@ app.py
 
 4. Deploy the app.
 
-The app will work in **Demo fallback** mode without an API key.
+The app will work in **Demo fallback** mode without an API key. The RSS feature does not require an API key; it retrieves the latest five Google News RSS results for the selected company and passes them into the source pack.
 
 ## Optional API keys
 
@@ -71,7 +73,7 @@ Do not commit real API keys to GitHub.
 
 A simple way to explain the tool:
 
-> The visible output is a one-page PowerPoint company profile, but the underlying workflow is more than text generation. It retrieves structured database records, combines them with unstructured notes, asks an LLM to create structured fields, runs a review step, and maps the result into an editable business-ready template.
+> The visible output is a one-page PowerPoint company profile, but the underlying workflow is more than text generation. It retrieves structured database records, combines them with unstructured notes and recent news signals, asks an LLM to create structured fields, runs a review step, and maps the result into an editable business-ready template.
 
 A simple non-technical analogy:
 
@@ -82,6 +84,7 @@ A simple non-technical analogy:
 - The demo database is small and uses real-company example profiles for OpenAI, Anthropic and Mistral AI; figures are indicative and should be verified before external use.
 - Keyword note retrieval is simple; a production version could use embeddings/vector search.
 - The AI can overstate weak evidence if the source material is poor.
+- RSS/news retrieval can return duplicate, irrelevant, paywalled or weak articles; these should be treated as signals to verify, not definitive evidence.
 - The PowerPoint is a first draft and still requires human review.
 - A production version would need access permissions, audit logs, source citations and approval workflows.
 
@@ -92,6 +95,7 @@ A more robust version could include:
 - CRM / SharePoint / Snowflake / SQL Server connectors
 - MCP-style integration layer
 - RAG with citations
+- Approved news/data provider integration instead of a public RSS feed
 - structured output validation
 - user feedback loop
 - human approval before export or client sharing

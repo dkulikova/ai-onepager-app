@@ -5,9 +5,11 @@ import os
 import re
 import sqlite3
 from io import BytesIO
+from urllib.parse import quote_plus
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
+import feedparser
 import pandas as pd
 import streamlit as st
 
@@ -23,14 +25,14 @@ BASE = Path(__file__).parent
 def resolve_db_path() -> Path:
     """Support both foldered repos and flat GitHub uploads."""
     candidates = [
-        BASE / "briefing_demo.db",
+        BASE / "data" / "briefing_demo.db",
         BASE / "briefing_demo.db",
     ]
     for candidate in candidates:
         if candidate.exists():
             return candidate
     # Default creation path if setup_demo_data is needed.
-    return BASE / "briefing_demo.db"
+    return BASE / "data" / "briefing_demo.db"
 
 
 def resolve_notes_dirs() -> List[Path]:
@@ -93,6 +95,73 @@ def retrieve_relevant_notes(query: str, notes: Dict[str, str], max_notes: int = 
     return [f"Source note: {name}\n{text}" for _, name, text in scored[:max_notes]]
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_latest_company_articles(company_name: str, max_articles: int = 5) -> List[Dict[str, str]]:
+    """Retrieve recent company-related articles from Google News RSS.
+
+    This is a lightweight external signal source for the demo. In production,
+    replace this with an approved news provider, data vendor or internal connector.
+    """
+    query = quote_plus(f'"{company_name}"')
+    rss_url = f"https://news.google.com/rss/search?q={query}&hl=en-GB&gl=GB&ceid=GB:en"
+
+    try:
+        feed = feedparser.parse(rss_url)
+    except Exception as exc:
+        return [{
+            "title": "Latest news retrieval failed",
+            "published": "",
+            "summary": f"The RSS feed could not be read: {exc}",
+            "link": rss_url,
+        }]
+
+    articles: List[Dict[str, str]] = []
+    seen_titles = set()
+
+    for entry in feed.entries:
+        title = entry.get("title", "").strip()
+        if not title or title.lower() in seen_titles:
+            continue
+        seen_titles.add(title.lower())
+        articles.append({
+            "title": title,
+            "published": entry.get("published", ""),
+            "summary": re.sub(r"<.*?>", "", entry.get("summary", "")).strip(),
+            "link": entry.get("link", ""),
+        })
+        if len(articles) >= max_articles:
+            break
+
+    if not articles:
+        return [{
+            "title": "No recent articles retrieved",
+            "published": "",
+            "summary": "No RSS results were returned for this company. Treat recent external signals as unavailable.",
+            "link": rss_url,
+        }]
+
+    return articles
+
+
+def format_articles_for_prompt(articles: List[Dict[str, str]]) -> str:
+    """Format RSS articles into a source-pack section for the LLM."""
+    if not articles:
+        return "No recent articles were retrieved."
+
+    formatted = []
+    for i, article in enumerate(articles, start=1):
+        formatted.append(
+            f"""
+Article {i}
+Title: {article.get('title', '')}
+Published: {article.get('published', '')}
+Summary: {article.get('summary', '')}
+Link: {article.get('link', '')}
+""".strip()
+        )
+    return "\n\n".join(formatted)
+
+
 # -----------------------------
 # Prompt / workflow layer
 # -----------------------------
@@ -101,10 +170,12 @@ def build_source_pack(
     selected_project: pd.Series,
     extra_notes: str,
     retrieved_notes: List[str],
+    latest_articles: List[Dict[str, str]],
 ) -> str:
     company_context = "\n".join([f"- {col}: {selected_company[col]}" for col in selected_company.index])
     project_context = "\n".join([f"- {col}: {selected_project[col]}" for col in selected_project.index])
     note_context = "\n\n".join(retrieved_notes) if retrieved_notes else "No relevant local notes found."
+    latest_news_context = format_articles_for_prompt(latest_articles)
 
     return f"""
 STRUCTURED COMPANY DATA
@@ -115,6 +186,9 @@ PROJECT / USE CASE DATA
 
 LOCAL MARKDOWN / OBSIDIAN NOTES
 {note_context}
+
+LATEST NEWS / RECENT EXTERNAL SIGNALS
+{latest_news_context}
 
 USER ADDED NOTES
 {extra_notes or 'No additional notes provided.'}
@@ -143,7 +217,7 @@ Return ONLY valid JSON using exactly this schema:
   "company_description": "2-3 sentences suitable for a left-side profile panel",
   "what_they_do": ["bullet 1", "bullet 2", "bullet 3"],
   "key_facts": ["bullet 1", "bullet 2", "bullet 3", "bullet 4"],
-  "signals": ["bullet 1", "bullet 2", "bullet 3"],
+  "latest_news_signals": ["bullet 1", "bullet 2", "bullet 3"],
   "risks": ["bullet 1", "bullet 2", "bullet 3"],
   "timeline": [
     {{"year": "2024", "text": "milestone or available evidence"}},
@@ -158,6 +232,8 @@ Style rules:
 - Be concise but specific.
 - Avoid hype.
 - Separate evidence from interpretation.
+- For latest_news_signals, use the latest news articles in the source pack. Summarise only the most relevant recent signals and do not overstate weak, duplicate or inconclusive headlines.
+- If the latest news is unavailable, irrelevant or uncertain, say that recent external signals require verification.
 - Make the output useful for a senior business stakeholder.
 - Keep each bullet short enough to fit on a PowerPoint one-pager.
 """.strip()
@@ -225,7 +301,7 @@ def demo_fallback(source_pack: str) -> str:
   "company_description": "This profile combines structured database fields with unstructured Markdown notes. It is designed as a business-ready first draft rather than a final recommendation.",
   "what_they_do": ["Uses available company and project records", "Combines structured data with analyst-style notes", "Turns messy inputs into a PowerPoint-ready brief"],
   "key_facts": ["Database and notes were retrieved successfully", "The visible output is a single-slide company profile", "The workflow can be extended to CRM, SharePoint or SQL systems", "Human review is required before external use"],
-  "signals": ["Growth signal is inferred from the provided source pack", "The app can include user-added notes and uploaded text files", "A review step flags uncertainty and gaps"],
+  "latest_news_signals": ["Latest external signals are retrieved automatically from RSS when a company is selected", "RSS headlines are useful as signals but should be verified before external use", "The review step should flag uncertainty, duplicates or weak evidence"],
   "risks": ["Fallback mode is not using a live LLM", "The output depends on source quality and data freshness", "Claims should be checked before client use"],
   "timeline": [
     {"year": "2024", "text": "Structured demo data available"},
@@ -301,10 +377,10 @@ def default_profile_sections(selected_company: pd.Series, selected_project: pd.S
             f"Current office: {company.get('current_office_location', 'Not available')}",
             f"Relevance score: {company.get('relevance_score', 'Not available')}",
         ],
-        "signals": [
+        "latest_news_signals": [
             str(company.get("recent_news", "Recent news not available")),
             str(company.get("expansion_signal", "Expansion signal to verify")),
-            "Relevance is inferred from available source material, not a confirmed requirement.",
+            "Recent external signals should be verified before use.",
         ],
         "risks": [
             "No confirmed real estate requirement unless stated in the source material.",
@@ -372,8 +448,8 @@ def profile_to_markdown(profile: Dict[str, Any]) -> str:
 ## Key facts
 {bullets('key_facts')}
 
-## Relevant signals / evidence
-{bullets('signals')}
+## Latest news / recent signals
+{bullets('latest_news_signals')}
 
 ## Risks / things to verify
 {bullets('risks')}
@@ -522,7 +598,7 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
     # Main section cards
     add_card(slide, 3.65, 2.42, 2.75, 1.40, "What they do", profile.get("what_they_do"), "W", max_items=3)
     add_card(slide, 6.85, 2.42, 2.75, 1.40, "Key facts", profile.get("key_facts"), "K", max_items=4)
-    add_card(slide, 10.05, 2.42, 2.8, 1.40, "Evidence signals", profile.get("signals"), "E", max_items=3)
+    add_card(slide, 10.05, 2.42, 2.8, 1.40, "Latest news / signals", profile.get("latest_news_signals"), "L", max_items=3)
 
     add_card(slide, 3.65, 4.18, 2.75, 1.25, "Risks / verify", profile.get("risks"), "R", max_items=3)
     add_card(slide, 6.85, 4.18, 2.75, 1.25, "Next steps", profile.get("next_steps"), "N", max_items=3)
@@ -618,6 +694,16 @@ with col1:
     with st.expander("View database record"):
         st.dataframe(pd.DataFrame(selected_company).rename(columns={0: "value"}))
 
+    with st.expander("View latest articles retrieved"):
+        for article in latest_articles:
+            st.markdown(f"**{article.get('title', '')}**")
+            if article.get("published"):
+                st.caption(article.get("published"))
+            if article.get("summary"):
+                st.write(article.get("summary"))
+            if article.get("link"):
+                st.write(article.get("link"))
+
 with col2:
     st.subheader("2. Add extra context")
     extra_notes = st.text_area(
@@ -631,7 +717,8 @@ with col2:
 
 query = f"{company_name} {project_name} {extra_notes}"
 retrieved_notes = retrieve_relevant_notes(query, notes)
-source_pack = build_source_pack(selected_company, selected_project, extra_notes, retrieved_notes)
+latest_articles = get_latest_company_articles(company_name, max_articles=5)
+source_pack = build_source_pack(selected_company, selected_project, extra_notes, retrieved_notes, latest_articles)
 
 st.subheader("3. Generate output")
 st.write("This runs a simple chain: retrieve context → draft structured profile → review draft → export editable PowerPoint.")
@@ -654,11 +741,12 @@ if st.button("Generate one-pager", type="primary"):
     st.session_state["draft"] = markdown_draft
     st.session_state["review"] = review
     st.session_state["source_pack"] = source_pack
+    st.session_state["latest_articles"] = latest_articles
     st.session_state["pptx_file"] = pptx_file.getvalue()
     st.session_state["pptx_name"] = f"{company_name.replace(' ', '_')}_one_page_company_profile.pptx"
 
 if "profile" in st.session_state:
-    tab1, tab2, tab3, tab4 = st.tabs(["PowerPoint output", "Text preview", "AI review", "Source pack"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["PowerPoint output", "Text preview", "Latest articles", "AI review", "Source pack"])
     with tab1:
         st.success("PowerPoint one-pager created. Download and open in PowerPoint to edit the slide.")
         st.download_button(
@@ -678,13 +766,23 @@ if "profile" in st.session_state:
             mime="text/markdown",
         )
     with tab3:
-        st.markdown(st.session_state["review"])
+        for article in st.session_state.get("latest_articles", []):
+            st.markdown(f"**{article.get('title', '')}**")
+            if article.get("published"):
+                st.caption(article.get("published"))
+            if article.get("summary"):
+                st.write(article.get("summary"))
+            if article.get("link"):
+                st.write(article.get("link"))
+            st.divider()
     with tab4:
+        st.markdown(st.session_state["review"])
+    with tab5:
         st.code(st.session_state["source_pack"], language="text")
 
 st.divider()
 st.caption(
     "Interview talking point: the visible output is an editable PowerPoint one-pager, but the underlying pattern is source retrieval, "
-    "structured extraction, LLM drafting, review and human approval. A production version could connect to CRM, SharePoint, "
+    "structured extraction, latest-news retrieval, LLM drafting, review and human approval. A production version could connect to CRM, SharePoint, "
     "Snowflake, SQL Server or MCP-style connectors, with permissions and audit controls."
 )
