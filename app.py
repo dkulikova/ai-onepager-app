@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit as st
 
 BASE = Path(__file__).parent
-DB_PATH = BASE / "data" / "briefing_demo.db"
+DB_PATH = BASE / "briefing_demo.db"
 NOTES_DIR = BASE / "notes"
 
 st.set_page_config(page_title="AI Business Briefing Assistant", layout="wide")
