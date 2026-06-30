@@ -16,12 +16,21 @@ A lightweight Streamlit prototype that turns structured company data, Markdown/O
 - `setup_demo_data.py` — creates the demo SQLite database and sample notes
 - `requirements.txt` — Python dependencies for Streamlit Cloud
 - `briefing_demo.db` — flat-upload copy of the demo SQLite database
-- `northstar_robotics.md` and `helio_grid.md` — flat-upload copies of the demo notes
+- `openai.md`, `anthropic.md` and `mistral_ai.md` — flat-upload copies of the demo notes
 - `data/briefing_demo.db` — foldered copy of the demo SQLite database
 - `notes/` — foldered copy of the demo notes
 - `.streamlit/secrets.toml.example` — example secret names for API keys
 
 The app supports both foldered and flat GitHub uploads. If everything is uploaded to the same GitHub folder, it will look for `briefing_demo.db` and the `.md` notes beside `app.py`. If folder structure is preserved, it will use `data/briefing_demo.db` and `notes/`.
+
+
+## Demo companies
+
+The included demo database contains three real AI-company examples:
+
+- **OpenAI** — frontier AI research and deployment company; demo profile focuses on ChatGPT, Codex, API and enterprise AI platform positioning.
+- **Anthropic** — AI safety and research company; demo profile focuses on Claude Enterprise, governance, data controls and reliable AI systems.
+- **Mistral AI** — Paris-headquartered AI company; demo profile focuses on open models, enterprise agents and deployment portability.
 
 ## Deploying on Streamlit Cloud
 
@@ -31,8 +40,9 @@ The app supports both foldered and flat GitHub uploads. If everything is uploade
    - `requirements.txt`
    - `README.md`
    - `briefing_demo.db`
-   - `northstar_robotics.md`
-   - `helio_grid.md`
+   - `openai.md`
+   - `anthropic.md`
+   - `mistral_ai.md`
 
 2. In Streamlit Cloud, create a new app from the GitHub repo.
 
@@ -69,7 +79,7 @@ A simple non-technical analogy:
 
 ## Limitations to mention
 
-- The demo database is small and uses mock data.
+- The demo database is small and uses real-company example profiles for OpenAI, Anthropic and Mistral AI; figures are indicative and should be verified before external use.
 - Keyword note retrieval is simple; a production version could use embeddings/vector search.
 - The AI can overstate weak evidence if the source material is poor.
 - The PowerPoint is a first draft and still requires human review.
