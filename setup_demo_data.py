@@ -1,3 +1,4 @@
+import shutil
 import sqlite3
 from pathlib import Path
 
@@ -5,8 +6,6 @@ BASE = Path(__file__).parent
 DATA_DIR = BASE / "data"
 NOTES_DIR = BASE / "notes"
 DB_PATH = DATA_DIR / "briefing_demo.db"
-DATA_DIR.mkdir(exist_ok=True)
-NOTES_DIR.mkdir(exist_ok=True)
 
 companies = [
     {
@@ -58,60 +57,7 @@ projects = [
     },
 ]
 
-conn = sqlite3.connect(DB_PATH)
-cur = conn.cursor()
-cur.execute("DROP TABLE IF EXISTS companies")
-cur.execute("DROP TABLE IF EXISTS projects")
-cur.execute(
-    """
-    CREATE TABLE companies (
-        company_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        company_name TEXT,
-        sector TEXT,
-        hq_location TEXT,
-        employee_count INTEGER,
-        current_office_location TEXT,
-        recent_news TEXT,
-        expansion_signal TEXT,
-        relevance_score INTEGER
-    )
-    """
-)
-cur.execute(
-    """
-    CREATE TABLE projects (
-        project_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        project_name TEXT,
-        client TEXT,
-        location TEXT,
-        target_sector TEXT,
-        brief_description TEXT
-    )
-    """
-)
-for row in companies:
-    cur.execute(
-        """
-        INSERT INTO companies
-        (company_name, sector, hq_location, employee_count, current_office_location, recent_news, expansion_signal, relevance_score)
-        VALUES (:company_name, :sector, :hq_location, :employee_count, :current_office_location, :recent_news, :expansion_signal, :relevance_score)
-        """,
-        row,
-    )
-for row in projects:
-    cur.execute(
-        """
-        INSERT INTO projects
-        (project_name, client, location, target_sector, brief_description)
-        VALUES (:project_name, :client, :location, :target_sector, :brief_description)
-        """,
-        row,
-    )
-conn.commit()
-conn.close()
-
-(NOTES_DIR / "northstar_robotics.md").write_text(
-    """# Northstar Robotics research notes
+northstar_note = """# Northstar Robotics research notes
 
 Northstar Robotics is moving from product-led growth into enterprise deployments. Public hiring signals suggest a stronger focus on sales engineering, implementation, customer success and partnerships.
 
@@ -119,12 +65,9 @@ Useful evidence for a one-pager:
 - The company is likely to need client-facing space if enterprise customers become a larger part of revenue.
 - The current office location is convenient for talent but may not be ideal for executive meetings.
 - Risk: expansion interest is inferred from hiring and funding signals; there is no confirmed property search.
-""",
-    encoding="utf-8",
-)
+"""
 
-(NOTES_DIR / "helio_grid.md").write_text(
-    """# HelioGrid Energy research notes
+helio_note = """# HelioGrid Energy research notes
 
 HelioGrid sells analytics software to energy and infrastructure clients. Their funding and partnership activity suggests they are entering a commercial scaling phase.
 
@@ -132,9 +75,77 @@ Useful evidence for a one-pager:
 - London could support investor, utility and infrastructure client engagement.
 - The company may prefer flexible space before committing to a large headquarters.
 - Risk: Manchester remains the main HQ and talent base.
-""",
-    encoding="utf-8",
-)
+"""
 
-print(f"Demo database created at: {DB_PATH}")
-print(f"Demo notes created at: {NOTES_DIR}")
+
+def main() -> None:
+    DATA_DIR.mkdir(exist_ok=True)
+    NOTES_DIR.mkdir(exist_ok=True)
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("DROP TABLE IF EXISTS companies")
+    cur.execute("DROP TABLE IF EXISTS projects")
+    cur.execute(
+        """
+        CREATE TABLE companies (
+            company_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_name TEXT,
+            sector TEXT,
+            hq_location TEXT,
+            employee_count INTEGER,
+            current_office_location TEXT,
+            recent_news TEXT,
+            expansion_signal TEXT,
+            relevance_score INTEGER
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE projects (
+            project_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_name TEXT,
+            client TEXT,
+            location TEXT,
+            target_sector TEXT,
+            brief_description TEXT
+        )
+        """
+    )
+    for row in companies:
+        cur.execute(
+            """
+            INSERT INTO companies
+            (company_name, sector, hq_location, employee_count, current_office_location, recent_news, expansion_signal, relevance_score)
+            VALUES (:company_name, :sector, :hq_location, :employee_count, :current_office_location, :recent_news, :expansion_signal, :relevance_score)
+            """,
+            row,
+        )
+    for row in projects:
+        cur.execute(
+            """
+            INSERT INTO projects
+            (project_name, client, location, target_sector, brief_description)
+            VALUES (:project_name, :client, :location, :target_sector, :brief_description)
+            """,
+            row,
+        )
+    conn.commit()
+    conn.close()
+
+    (NOTES_DIR / "northstar_robotics.md").write_text(northstar_note, encoding="utf-8")
+    (NOTES_DIR / "helio_grid.md").write_text(helio_note, encoding="utf-8")
+
+    # Convenience copies for manual GitHub web uploads where everything is uploaded flat.
+    shutil.copy2(DB_PATH, BASE / "briefing_demo.db")
+    (BASE / "northstar_robotics.md").write_text(northstar_note, encoding="utf-8")
+    (BASE / "helio_grid.md").write_text(helio_note, encoding="utf-8")
+
+    print(f"Demo database created at: {DB_PATH}")
+    print(f"Flat upload copy created at: {BASE / 'briefing_demo.db'}")
+    print(f"Demo notes created at: {NOTES_DIR}")
+
+
+if __name__ == "__main__":
+    main()

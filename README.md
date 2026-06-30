@@ -1,109 +1,87 @@
 # AI Business Briefing Assistant
 
-A lightweight Streamlit prototype for an interview demo.
+A lightweight Streamlit prototype that turns structured company data, Markdown/Obsidian-style notes, and user-added context into an editable one-page PowerPoint company profile.
 
-The demo shows how an AI-assisted one-pager tool can combine:
+## What the app demonstrates
 
-- structured data from a local SQLite database
-- unstructured Markdown / Obsidian-style notes
-- user-provided messy notes
-- an LLM generation step
-- a review / quality-check step
+- Structured data access from a local SQLite database
+- Unstructured note retrieval from Markdown files
+- LLM-powered structured drafting
+- Review step for unsupported claims and missing information
+- Downloadable single-slide `.pptx` output using a preset company-profile template
 
-The visible output is a one-page business brief, but the more interesting point is the workflow behind it: source retrieval, structured prompting, drafting, and human review.
+## Main files
 
-## 1. Setup
+- `app.py` — the Streamlit app and PowerPoint generation logic
+- `setup_demo_data.py` — creates the demo SQLite database and sample notes
+- `requirements.txt` — Python dependencies for Streamlit Cloud
+- `briefing_demo.db` — flat-upload copy of the demo SQLite database
+- `northstar_robotics.md` and `helio_grid.md` — flat-upload copies of the demo notes
+- `data/briefing_demo.db` — foldered copy of the demo SQLite database
+- `notes/` — foldered copy of the demo notes
+- `.streamlit/secrets.toml.example` — example secret names for API keys
 
-```bash
-cd onepager_ai_app
-python -m venv .venv
-source .venv/bin/activate  # Mac/Linux
-# .venv\Scripts\activate   # Windows
-pip install -r requirements.txt
-python setup_demo_data.py
-streamlit run app.py
-```
+The app supports both foldered and flat GitHub uploads. If everything is uploaded to the same GitHub folder, it will look for `briefing_demo.db` and the `.md` notes beside `app.py`. If folder structure is preserved, it will use `data/briefing_demo.db` and `notes/`.
 
-## 2. API keys
+## Deploying on Streamlit Cloud
 
-The app works without an API key in `Demo fallback` mode.
+1. Upload these files to GitHub:
+   - `app.py`
+   - `setup_demo_data.py`
+   - `requirements.txt`
+   - `README.md`
+   - `briefing_demo.db`
+   - `northstar_robotics.md`
+   - `helio_grid.md`
 
-To use a real model, copy the example secrets file:
+2. In Streamlit Cloud, create a new app from the GitHub repo.
 
-```bash
-cp .streamlit/secrets.toml.example .streamlit/secrets.toml
-```
-
-Then add either:
-
-```toml
-OPENAI_API_KEY = "your-key-here"
-```
-
-or:
-
-```toml
-ANTHROPIC_API_KEY = "your-key-here"
-```
-
-Do not commit real keys to GitHub.
-
-## 3. What to demo
-
-Suggested demo flow:
-
-1. Select a company and project from the dropdowns.
-2. Add messy notes in the text box.
-3. Generate the one-pager.
-4. Show the generated brief.
-5. Show the AI review tab.
-6. Show the source pack tab to explain grounding.
-
-## 4. How to explain the architecture
-
-Plain-English version:
-
-> The tool acts like a fast first-draft analyst. It pulls together structured data, notes and user context, then drafts a one-page brief. A second review step checks for unsupported claims, missing information and uncertainty.
-
-Technical version:
+3. Use this as the main file path:
 
 ```text
-Streamlit UI
-   ↓
-SQLite database + Markdown notes
-   ↓
-Simple retrieval step
-   ↓
-LLM prompt chain
-   ↓
-One-pager draft
-   ↓
-AI review / human-in-the-loop check
+app.py
 ```
 
-## 5. Future improvements
+4. Deploy the app.
 
-For a stronger production version, you could add:
+The app will work in **Demo fallback** mode without an API key.
 
-- embeddings / vector search instead of keyword note retrieval
-- database connectors to CRM, SharePoint, Snowflake or SQL Server
-- MCP-style connectors for approved external systems
-- source citations for every claim
-- user authentication and permission-aware retrieval
-- audit logs and version history
-- export to PowerPoint, Word or PDF
-- human approval workflow before client use
+## Optional API keys
 
-## 6. Interview positioning
+To use a real model, add secrets in Streamlit Cloud app settings:
 
-Suggested framing:
+```toml
+OPENAI_API_KEY = "your_key_here"
+ANTHROPIC_API_KEY = "your_key_here"
+```
 
-> The one-pager is just the visible output. The real system is an AI workflow that retrieves context, structures information, creates a draft and flags where human judgement is still required.
+Do not commit real API keys to GitHub.
 
-Limitations to mention:
+## Interview positioning
 
-- output quality depends on input quality
-- LLMs can sound confident even when wrong
-- the prototype uses simple keyword retrieval rather than semantic search
-- source grounding and permission controls would be critical in production
-- human review remains essential
+A simple way to explain the tool:
+
+> The visible output is a one-page PowerPoint company profile, but the underlying workflow is more than text generation. It retrieves structured database records, combines them with unstructured notes, asks an LLM to create structured fields, runs a review step, and maps the result into an editable business-ready template.
+
+A simple non-technical analogy:
+
+> It works like a fast first-draft analyst. It pulls together the available evidence, organises it into a familiar company-profile format, drafts the slide, and then flags where a human still needs to check the judgement.
+
+## Limitations to mention
+
+- The demo database is small and uses mock data.
+- Keyword note retrieval is simple; a production version could use embeddings/vector search.
+- The AI can overstate weak evidence if the source material is poor.
+- The PowerPoint is a first draft and still requires human review.
+- A production version would need access permissions, audit logs, source citations and approval workflows.
+
+## Future production architecture
+
+A more robust version could include:
+
+- CRM / SharePoint / Snowflake / SQL Server connectors
+- MCP-style integration layer
+- RAG with citations
+- structured output validation
+- user feedback loop
+- human approval before export or client sharing
