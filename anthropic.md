@@ -1,21 +1,24 @@
 # Anthropic research notes
 
-Positioning:
-Anthropic is an AI safety and research company focused on building reliable, interpretable and steerable AI systems. Its main product family is Claude, including Claude for individuals, teams, enterprises and API developers.
+Mission & positioning:
+Anthropic is an AI safety and research company building reliable, interpretable and steerable AI systems. Its main product family is Claude.
 
-Useful evidence for a one-pager:
-- Claude Enterprise is positioned around organization-wide deployment with governance, data controls and admin infrastructure for IT and security teams.
-- Anthropic's brand is differentiated by safety, reliability and enterprise trust.
-- Public announcements describe expansion across Europe, including offices in London, Dublin, Zurich, Paris and Munich.
-- Anthropic is a strong demo profile because it lets the presenter explain AI safety, enterprise deployment and human oversight in plain language.
+Products and commercial context:
+- Claude is used for writing, coding, analysis and enterprise workflows.
+- Claude Enterprise adds governance, admin and security controls for organisations.
+- Claude API supports developers building AI applications.
+- Claude Code and sector-specific Claude products expand into more specialised workflows.
 
-Caveats / things to verify:
-- Office expansion and employee counts are highly time-sensitive.
-- The Claude model family and product tiers change quickly.
-- Use current Anthropic sources before quoting specific model capabilities or customer figures.
+Leadership notes:
+- Dario Amodei is CEO and co-founder.
+- Daniela Amodei is President and co-founder.
+- Mike Krieger is Chief Product Officer.
 
-Source links for manual review:
-- https://www.anthropic.com/
+Caveats:
+- Anthropic is private, so financial performance is not fully public.
+- Safety and enterprise trust are central differentiators but should be tied to concrete evidence, not treated as marketing claims alone.
+
+Manual review links:
+- https://www.anthropic.com/company
 - https://www.anthropic.com/product/enterprise
-- https://www.anthropic.com/news/new-offices-in-paris-and-munich-expand-european-presence
-- https://platform.claude.com/docs/en/api/overview
+- https://platform.claude.com/docs/

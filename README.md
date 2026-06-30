@@ -1,101 +1,111 @@
 # AI Business Briefing Assistant
 
-A lightweight Streamlit prototype that turns structured company data, Markdown/Obsidian-style notes, and user-added context into an editable one-page PowerPoint company profile.
+A Streamlit prototype that turns a free-text company request into an editable PowerPoint one-pager.
 
-## What the app demonstrates
+## What the tool does
 
-- Structured data access from a local SQLite database
-- Unstructured note retrieval from Markdown files
-- Automatic latest-news retrieval from Google News RSS for the selected company
-- LLM-powered structured drafting
-- Review step for unsupported claims and missing information
-- Downloadable single-slide `.pptx` output using a preset company-profile template
-- Fixed “Latest news / recent signals” section in the one-pager
+The app lets a user:
 
-## Main files
+1. Type any company name.
+2. Select a brief type: `Investment one-pager` or `Company brief`.
+3. Add messy notes or upload a `.txt` / `.md` file.
+4. Match the company to an internal SQLite company intelligence database.
+5. Optionally include the latest five Google News RSS articles.
+6. Generate a structured one-page PowerPoint company profile.
+7. Review the source pack, latest news and AI review output.
 
-- `app.py` — the Streamlit app and PowerPoint generation logic
-- `setup_demo_data.py` — creates the demo SQLite database and sample notes
-- `requirements.txt` — Python dependencies for Streamlit Cloud, including `feedparser` for RSS retrieval
-- `briefing_demo.db` — flat-upload copy of the demo SQLite database
-- `openai.md`, `anthropic.md` and `mistral_ai.md` — flat-upload copies of the demo notes
-- `data/briefing_demo.db` — foldered copy of the demo SQLite database
-- `notes/` — foldered copy of the demo notes
-- `.streamlit/secrets.toml.example` — example secret names for API keys
+## What changed in this version
 
-The app supports both foldered and flat GitHub uploads. If everything is uploaded to the same GitHub folder, it will look for `briefing_demo.db` and the `.md` notes beside `app.py`. If folder structure is preserved, it will use `data/briefing_demo.db` and `notes/`.
+The database has been expanded from a simple company table into a richer company intelligence layer:
 
+- `companies` — company profile, mission, HQ, founded year, company type, sector and positioning
+- `leadership` — executive leadership and roles
+- `products` — products, services and platform components
+- `financials` — funding, valuation and commercial signals
+- `milestones` — company timeline and notable signals
+- `projects` — demo brief types and use-case context
+
+The PowerPoint one-pager now includes:
+
+- Mission / positioning
+- Growth direction
+- Target market
+- Company snapshot
+- What they do
+- Executive leadership
+- Funding / commercial signals
+- Latest news / signals
+- Risks / things to verify
+- Recommended next steps
+- Company milestones / signals
 
 ## Demo companies
 
-The included demo database contains three real AI-company examples:
+The demo database includes real example companies:
 
-- **OpenAI** — frontier AI research and deployment company; demo profile focuses on ChatGPT, Codex, API and enterprise AI platform positioning.
-- **Anthropic** — AI safety and research company; demo profile focuses on Claude Enterprise, governance, data controls and reliable AI systems.
-- **Mistral AI** — Paris-headquartered AI company; demo profile focuses on open models, enterprise agents and deployment portability.
+- OpenAI
+- Anthropic
+- Mistral AI
 
-## Deploying on Streamlit Cloud
+The data is presentation-ready and intentionally concise. It should be treated as a demo company-intelligence layer, not a live financial database.
 
-1. Upload these files to GitHub:
-   - `app.py`
-   - `setup_demo_data.py`
-   - `requirements.txt`
-   - `README.md`
-   - `briefing_demo.db`
-   - `openai.md`
-   - `anthropic.md`
-   - `mistral_ai.md`
+## Important limitations
 
-2. In Streamlit Cloud, create a new app from the GitHub repo.
+- These companies are private, so full financial performance is not publicly available like it would be for listed companies.
+- Funding and valuation details are included as commercial signals, not complete financial statements.
+- Leadership, product names, funding and valuation can change quickly.
+- Google News RSS results are useful as signals, but can be duplicated, irrelevant, incomplete or behind paywalls.
+- The PowerPoint output is an AI-generated first draft and should be reviewed before external use.
 
-3. Use this as the main file path:
+## Run locally
+
+```bash
+pip install -r requirements.txt
+python setup_demo_data.py
+streamlit run app.py
+```
+
+## Streamlit Cloud deployment
+
+If you upload everything flat to GitHub, include at minimum:
+
+```text
+app.py
+setup_demo_data.py
+requirements.txt
+briefing_demo.db
+openai.md
+anthropic.md
+mistral_ai.md
+```
+
+If you preserve folders, include:
+
+```text
+app.py
+setup_demo_data.py
+requirements.txt
+data/briefing_demo.db
+notes/openai.md
+notes/anthropic.md
+notes/mistral_ai.md
+```
+
+Set Streamlit main file path to:
 
 ```text
 app.py
 ```
 
-4. Deploy the app.
+## API keys
 
-The app will work in **Demo fallback** mode without an API key. The RSS feature does not require an API key; it retrieves the latest five Google News RSS results for the selected company and passes them into the source pack.
-
-## Optional API keys
-
-To use a real model, add secrets in Streamlit Cloud app settings:
+The app runs in `Demo fallback` mode without an API key. For real model output, add secrets in Streamlit Cloud:
 
 ```toml
 OPENAI_API_KEY = "your_key_here"
 ANTHROPIC_API_KEY = "your_key_here"
 ```
 
-Do not commit real API keys to GitHub.
+## Interview talking point
 
-## Interview positioning
-
-A simple way to explain the tool:
-
-> The visible output is a one-page PowerPoint company profile, but the underlying workflow is more than text generation. It retrieves structured database records, combines them with unstructured notes and recent news signals, asks an LLM to create structured fields, runs a review step, and maps the result into an editable business-ready template.
-
-A simple non-technical analogy:
-
-> It works like a fast first-draft analyst. It pulls together the available evidence, organises it into a familiar company-profile format, drafts the slide, and then flags where a human still needs to check the judgement.
-
-## Limitations to mention
-
-- The demo database is small and uses real-company example profiles for OpenAI, Anthropic and Mistral AI; figures are indicative and should be verified before external use.
-- Keyword note retrieval is simple; a production version could use embeddings/vector search.
-- The AI can overstate weak evidence if the source material is poor.
-- RSS/news retrieval can return duplicate, irrelevant, paywalled or weak articles; these should be treated as signals to verify, not definitive evidence.
-- The PowerPoint is a first draft and still requires human review.
-- A production version would need access permissions, audit logs, source citations and approval workflows.
-
-## Future production architecture
-
-A more robust version could include:
-
-- CRM / SharePoint / Snowflake / SQL Server connectors
-- MCP-style integration layer
-- RAG with citations
-- Approved news/data provider integration instead of a public RSS feed
-- structured output validation
-- user feedback loop
-- human approval before export or client sharing
+The visible output is a PowerPoint one-pager. The more important concept is the workflow behind it: the tool checks internal company intelligence, retrieves supporting notes, optionally pulls latest external signals, gives the LLM a controlled source pack, and maps the structured output into an editable business artefact.

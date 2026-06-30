@@ -1,21 +1,25 @@
 # OpenAI research notes
 
-Positioning:
-OpenAI is an AI research and deployment company. Its stated mission is to ensure that artificial general intelligence benefits all of humanity. For business users, the company is best known for ChatGPT, ChatGPT Enterprise/Business, Codex and the OpenAI API platform.
+Mission & positioning:
+OpenAI describes itself as an AI research and deployment company. Its mission is to ensure that artificial general intelligence benefits all of humanity.
 
-Useful evidence for a one-pager:
-- OpenAI's business offering is positioned as a complete AI platform spanning ChatGPT, Codex and API access.
-- Enterprise messaging focuses on productivity, internal knowledge, agents, coding and team-wide deployment.
-- OpenAI careers listings show hiring across San Francisco and international markets, including London, Dublin, Washington DC, Singapore and Tokyo.
-- The company is a useful demo profile because it is highly recognisable to non-technical audiences.
+Products and commercial context:
+- ChatGPT is the most recognisable user-facing product.
+- ChatGPT Enterprise / Business and the OpenAI API are core enterprise and developer channels.
+- Codex expands OpenAI's relevance in software engineering and agentic coding workflows.
+- Sora and multimodal products extend the company into creative and media generation.
 
-Caveats / things to verify:
-- Employee count and office footprint change quickly and should be treated as indicative.
-- Product names, models and enterprise packaging can change frequently.
-- For external use, validate any commercial claims directly against OpenAI's current official pages.
+Leadership notes:
+- Sam Altman is CEO and co-founder.
+- Greg Brockman is president and co-founder.
+- Fidji Simo joined as CEO of Applications, reporting to Sam Altman.
+- Sarah Friar is CFO and Jakub Pachocki is Chief Scientist.
 
-Source links for manual review:
+Caveats:
+- OpenAI is private, so full financial performance is not reported like a public company.
+- Revenue, valuation and product details change quickly and should be checked before external use.
+
+Manual review links:
 - https://openai.com/about/
-- https://openai.com/business/
+- https://chatgpt.com/business/enterprise/
 - https://openai.com/api/
-- https://openai.com/careers/search/
