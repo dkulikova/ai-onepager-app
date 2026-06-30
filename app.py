@@ -30,7 +30,7 @@ def resolve_db_path() -> Path:
         if candidate.exists():
             return candidate
     # Default creation path if setup_demo_data is needed.
-    return BASE / "data" / "briefing_demo.db"
+    return BASE / "briefing_demo.db"
 
 
 def resolve_notes_dirs() -> List[Path]:
