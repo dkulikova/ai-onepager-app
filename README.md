@@ -44,7 +44,6 @@ The PowerPoint one-pager now includes:
 The demo database includes real example companies:
 
 - OpenAI
-- Anthropic
 - Mistral AI
 
 The data is presentation-ready and intentionally concise. It should be treated as a demo company-intelligence layer, not a live financial database.
@@ -102,10 +101,17 @@ app.py
 The app runs in `Demo fallback` mode without an API key. For real model output, add secrets in Streamlit Cloud:
 
 ```toml
-OPENAI_API_KEY = "your_key_here"
-ANTHROPIC_API_KEY = "your_key_here"
+OPENAI_API_KEY = "your_openai_key_here"
 ```
 
 ## Interview talking point
 
 The visible output is a PowerPoint one-pager. The more important concept is the workflow behind it: the tool checks internal company intelligence, retrieves supporting notes, optionally pulls latest external signals, gives the LLM a controlled source pack, and maps the structured output into an editable business artefact.
+
+## Prompt engineering
+
+The main prompt lives in `app.py` inside `build_prompt(source_pack, brief_type)`. This prompt controls the role, evidence rules, JSON schema, tone and brief-type logic.
+
+The quality-control prompt lives in `build_review_prompt(profile_json, source_pack)`. This second prompt checks unsupported claims, missing information, private-company financial uncertainty and whether the output is clear for a non-technical audience.
+
+The app is designed for OpenAI. Add `OPENAI_API_KEY` in Streamlit Cloud secrets to use the live LLM workflow.

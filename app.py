@@ -269,60 +269,104 @@ USER ADDED NOTES
 
 
 def build_prompt(source_pack: str, brief_type: str) -> str:
+    """Main generation prompt for the OpenAI call.
+
+    This is the core prompt-engineering layer. It tells the model what role to play,
+    what evidence to trust, how to treat private-company financial information, and
+    exactly which structured fields to return for the PowerPoint template.
+    """
     return f"""
-You are helping draft a one-page business profile for a non-technical senior business audience.
+You are a senior business analyst creating a one-page company intelligence brief for a non-technical senior audience.
 
 Brief type: {brief_type}
 
-Use ONLY the source pack below. Do not invent facts. If something is uncertain, say it is uncertain.
-Do not present private-company funding/valuation as full financial performance. Treat it as funding and commercial signals.
+Your job is to turn the source pack into a concise, evidence-grounded PowerPoint one-pager.
+You are not writing marketing copy. You are creating a practical business briefing that a human can review, edit and use.
+
+Core rules:
+- Use ONLY the information in the source pack.
+- Do not invent facts, numbers, partnerships, products, leaders, dates or financials.
+- If the source pack is incomplete, say what is missing or what needs verification.
+- Treat private-company funding, valuation and revenue references as funding/commercial signals, not as audited financial performance.
+- Separate facts from interpretation. Do not make weak evidence sound definitive.
+- Latest news/RSS headlines are external signals to verify, not proof on their own.
+- Write for a smart business audience that may not be technical.
+- Use clear, direct language and avoid AI hype.
+
+Prioritise:
+1. Mission, positioning and strategic focus
+2. Executive leadership and why the leadership context matters
+3. Products/services and what the company actually does
+4. Funding/commercial signals, especially for private companies
+5. Latest news only where it is relevant to the brief
+6. Risks, caveats and questions for human review
+7. Concrete next steps
+
+Brief-type guidance:
+- If the brief type is "Investment one-pager", emphasise market relevance, leadership, product surface, growth/funding signals, risks, and diligence next steps.
+- If the brief type is "Company brief", emphasise what the company does, mission/positioning, leadership, key facts, recent signals, and business relevance.
 
 SOURCE PACK:
 {source_pack}
 
-Return ONLY valid JSON using exactly this schema:
+Return ONLY valid JSON. Do not include markdown, commentary, citations outside the JSON, or code fences.
+Use exactly this schema and keep each field concise enough to fit a single PowerPoint slide:
 {{
   "headline": "short title for the profile",
-  "company_positioning": "1-2 sentences on mission and positioning",
-  "growth_direction": "1-2 sentences on likely growth direction / vision",
-  "target_market": "1-2 sentences on target market / audience",
+  "company_positioning": "1-2 sentences on mission, positioning and differentiation",
+  "growth_direction": "1-2 sentences on likely growth direction or strategic direction, based only on the source pack",
+  "target_market": "1-2 sentences on target users/customers/market",
   "company_description": "2-3 sentences suitable for a left-side profile panel",
-  "what_they_do": ["bullet 1", "bullet 2", "bullet 3"],
-  "leadership": ["Name — role", "Name — role", "Name — role"],
-  "key_facts": ["bullet 1", "bullet 2", "bullet 3", "bullet 4"],
-  "funding_commercial_signals": ["bullet 1", "bullet 2", "bullet 3"],
-  "latest_news_signals": ["bullet 1", "bullet 2", "bullet 3"],
-  "risks": ["bullet 1", "bullet 2", "bullet 3"],
+  "what_they_do": ["specific bullet 1", "specific bullet 2", "specific bullet 3"],
+  "leadership": ["Name — role; brief relevance", "Name — role; brief relevance", "Name — role; brief relevance"],
+  "key_facts": ["specific fact 1", "specific fact 2", "specific fact 3", "specific fact 4"],
+  "funding_commercial_signals": ["signal 1", "signal 2", "signal 3"],
+  "latest_news_signals": ["recent signal 1", "recent signal 2", "recent signal 3"],
+  "risks": ["risk / caveat 1", "risk / caveat 2", "risk / caveat 3"],
   "timeline": [
-    {{"year": "2023", "text": "milestone or evidence"}},
-    {{"year": "2024", "text": "milestone or evidence"}},
-    {{"year": "2025", "text": "milestone or evidence"}},
-    {{"year": "2026", "text": "milestone or evidence / to verify"}}
+    {{"year": "2023", "text": "milestone or signal"}},
+    {{"year": "2024", "text": "milestone or signal"}},
+    {{"year": "2025", "text": "milestone or signal"}},
+    {{"year": "2026", "text": "milestone, signal or to verify"}}
   ],
-  "next_steps": ["bullet 1", "bullet 2", "bullet 3"]
+  "next_steps": ["specific next step 1", "specific next step 2", "specific next step 3"]
 }}
 
-Style rules:
-- Use plain English.
-- Be concise but specific.
-- Avoid hype.
-- Separate evidence from interpretation.
-- Tailor the content to the selected brief type.
-- For an investment one-pager, emphasise mission, leadership quality, product surface, funding/commercial signals, market relevance, risks and diligence next steps.
-- For a company brief, emphasise what the company does, who leads it, key facts, recent signals and business relevance.
-- For latest_news_signals, use the latest news articles only if included. Do not overstate weak, duplicate or inconclusive headlines.
-- Keep each bullet short enough to fit on a PowerPoint one-pager.
+Field-specific instructions:
+- "leadership": include named executives only if they appear in the source pack. If leadership is missing, write "Leadership data to verify".
+- "funding_commercial_signals": for private companies, use language such as "reported", "funding signal", "commercial signal", or "to verify" where appropriate.
+- "latest_news_signals": include only relevant recent items. If the retrieved articles are weak, duplicated, irrelevant or missing, write that recent external signals require verification.
+- "risks": include both information-quality risks and business risks where relevant.
+- "next_steps": make these practical actions a human analyst or business team would take before using the one-pager.
 """.strip()
 
 
 def build_review_prompt(profile_json: str, source_pack: str) -> str:
+    """Quality-control prompt for the second OpenAI call."""
     return f"""
-Review the profile below against the source pack.
+You are reviewing an AI-generated company one-pager before it is used by a business team.
 
-Return:
-1. Claims that appear unsupported or need checking
-2. Important missing information
-3. Suggestions to make the brief clearer for a non-technical audience
+Compare the profile JSON against the source pack. Be strict and practical.
+
+Return a concise review with four headings:
+
+1. Claims to verify
+- Flag any claim that appears unsupported, too broad, too confident, or dependent on a weak source.
+
+2. Missing information
+- Highlight any important missing details, especially leadership, mission, products, funding/commercial signals, financials, or recent news.
+
+3. Risk notes
+- Flag private-company financial uncertainty, duplicated/irrelevant RSS results, outdated data, or areas where human judgement is needed.
+
+4. Suggested improvements for a non-technical audience
+- Suggest how to make the one-pager clearer, more specific, or less jargon-heavy.
+
+Rules:
+- Do not rewrite the full one-pager.
+- Do not introduce new facts.
+- Be concise, direct and useful.
+- Treat latest news as signals to verify, not definitive evidence.
 
 SOURCE PACK:
 {source_pack}
@@ -353,19 +397,16 @@ def call_openai(prompt: str, model: str = "gpt-4.1-mini") -> str:
     return response.output_text
 
 
-def call_anthropic(prompt: str, model: str = "claude-3-5-sonnet-latest") -> str:
-    import anthropic
-
-    client = anthropic.Anthropic(api_key=get_secret("ANTHROPIC_API_KEY"))
-    message = client.messages.create(model=model, max_tokens=1800, messages=[{"role": "user", "content": prompt}])
-    return "".join(block.text for block in message.content if getattr(block, "type", None) == "text")
 
 
-def run_llm(prompt: str, provider: str) -> str:
+def run_llm(prompt: str, provider: str = "OpenAI") -> str:
+    """Runs the generation or review prompt using OpenAI.
+
+    If no OpenAI key is available, return an empty string so the app can fall back
+    to the deterministic demo output instead of crashing during an interview demo.
+    """
     if provider == "OpenAI" and get_secret("OPENAI_API_KEY"):
         return call_openai(prompt)
-    if provider == "Anthropic" and get_secret("ANTHROPIC_API_KEY"):
-        return call_anthropic(prompt)
     return ""
 
 
@@ -707,7 +748,9 @@ notes = read_markdown_notes()
 
 with st.sidebar:
     st.header("Demo controls")
-    provider = st.selectbox("LLM provider", ["Demo fallback", "OpenAI", "Anthropic"])
+    provider = st.selectbox("LLM mode", ["OpenAI", "Demo fallback"])
+    if provider == "OpenAI" and not get_secret("OPENAI_API_KEY"):
+        st.warning("OpenAI key not found. Add OPENAI_API_KEY in Streamlit secrets, or use Demo fallback.")
     st.divider()
     st.caption(f"Database path: {DB_PATH.relative_to(BASE) if DB_PATH.exists() else DB_PATH}")
     st.caption(f"Internal company records: {len(companies)}")
