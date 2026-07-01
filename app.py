@@ -36,7 +36,7 @@ def resolve_notes_dirs() -> List[Path]:
 
 
 DB_PATH = resolve_db_path()
-st.set_page_config(page_title="AI Business Briefing Assistant", layout="wide")
+st.set_page_config(page_title="BriefIQ", layout="wide")
 
 
 # -----------------------------
