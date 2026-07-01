@@ -373,7 +373,7 @@ Use exactly this schema. Write complete but compact sentences that fit a single 
   "growth_direction": "one complete sentence, maximum 18 words, on likely growth or strategic direction",
   "target_market": "one complete sentence, maximum 18 words, on target users/customers/market",
   "company_description": "two complete sentences, maximum 45 words total, suitable for a left-side profile panel",
-  "company_snapshot": {"hq": "global HQ or to verify", "founded": "founded year or to verify", "company_type": "private/public/subsidiary/status or to verify", "sector": "sector or to verify", "employees": "employee count/scale or to verify"},
+  "company_snapshot": {{"hq": "global HQ or to verify", "founded": "founded year or to verify", "company_type": "private/public/subsidiary/status or to verify", "sector": "sector or to verify", "employees": "employee count/scale or to verify"}},
   "what_they_do": ["complete sentence, maximum 14 words", "complete sentence, maximum 14 words", "complete sentence, maximum 14 words"],
   "leadership": ["Current global CEO — role; brief relevance", "Current global executive leader — role; brief relevance", "Current global executive leader — role; brief relevance"],
   "key_facts": ["specific fact 1", "specific fact 2", "specific fact 3", "specific fact 4"],
