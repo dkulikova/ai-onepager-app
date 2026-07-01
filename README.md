@@ -140,3 +140,15 @@ For companies not found in the database, the generated profile includes a verifi
 > Not found in the internal database — this profile uses external/contextual information and needs additional verification.
 
 This warning is also carried into the PowerPoint output so the slide is not mistaken for a fully verified internal database profile.
+
+## Latest update: unknown-company and RSS behaviour
+
+This version includes a few refinements for interview/demo use:
+
+- The top coloured narrative cards in the PowerPoint template now use white text.
+- The latest-news lookup uses the typed company name as the Google News RSS search term and returns the first five non-empty RSS entries.
+- If the LLM returns fewer than five news items, the app appends the raw RSS feed titles so the PowerPoint news section does not end up with empty rows.
+- If no internal leadership records exist, the prompt asks the model to include high-confidence leadership information it believes is correct, while marking it for verification.
+- If no internal milestone records exist, the prompt asks the model to populate the milestone chart using high-confidence events such as founding year, product launches, funding rounds, public listings or recent announcements, with uncertain items marked as to verify.
+
+As before, latest news, leadership, funding and milestone information should be reviewed before external use.

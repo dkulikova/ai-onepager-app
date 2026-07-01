@@ -113,32 +113,45 @@ def format_df_records(title: str, df: pd.DataFrame) -> str:
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def get_latest_company_articles(company_name: str, max_articles: int = 5) -> List[Dict[str, str]]:
-    query = quote_plus(f'"{company_name}"')
+    """Return the first Google News RSS results for the typed company name.
+
+    This deliberately uses the company name as the lookup term and returns the
+    first five non-empty RSS entries. The LLM and human reviewer then decide
+    whether those items are relevant enough to include in the profile.
+    """
+    lookup_term = str(company_name or "").strip()
+    query = quote_plus(lookup_term)
     rss_url = f"https://news.google.com/rss/search?q={query}&hl=en-GB&gl=GB&ceid=GB:en"
 
     try:
         feed = feedparser.parse(rss_url)
     except Exception as exc:
-        return [{"title": "Latest news retrieval failed", "published": "", "summary": f"The RSS feed could not be read: {exc}", "link": rss_url}]
+        return [{"title": "Latest news retrieval failed", "published": "", "summary": f"The RSS feed could not be read: {exc}", "link": rss_url, "source": "Google News RSS"}]
 
     articles: List[Dict[str, str]] = []
-    seen_titles = set()
     for entry in feed.entries:
-        title = entry.get("title", "").strip()
-        if not title or title.lower() in seen_titles:
+        title = re.sub(r"\s+", " ", entry.get("title", "")).strip()
+        if not title:
             continue
-        seen_titles.add(title.lower())
+        summary = re.sub(r"<.*?>", "", entry.get("summary", "")).strip()
+        source = ""
+        try:
+            source = entry.get("source", {}).get("title", "") if isinstance(entry.get("source", {}), dict) else ""
+        except Exception:
+            source = ""
         articles.append({
             "title": title,
             "published": entry.get("published", ""),
-            "summary": re.sub(r"<.*?>", "", entry.get("summary", "")).strip(),
+            "summary": summary,
             "link": entry.get("link", ""),
+            "source": source,
+            "lookup_term": lookup_term,
         })
         if len(articles) >= max_articles:
             break
 
     if not articles:
-        return [{"title": "No recent articles retrieved", "published": "", "summary": "No RSS results were returned for this company.", "link": rss_url}]
+        return [{"title": "No recent articles retrieved", "published": "", "summary": f"No RSS results were returned for lookup term: {lookup_term}.", "link": rss_url, "source": "Google News RSS"}]
     return articles
 
 
@@ -298,14 +311,15 @@ You are not writing marketing copy. You are creating a practical business briefi
 Core rules:
 - First check the INTERNAL DATABASE MATCH STATUS in the source pack.
 - If an internal database match is available, use the internal structured records as the primary evidence.
-- If no internal database match is available, still produce a useful first draft by using the user context, local notes if any, latest news/RSS if included, and only very high-confidence general company knowledge.
+- If no internal database match is available, still produce a useful first draft by using the user context, local notes if any, latest news/RSS if included, and your high-confidence general knowledge.
 - If no internal database match is available, include this exact warning in the `verification_banner` field: "Not found in the internal database — this profile uses external/contextual information and needs additional verification."
-- Never invent facts, numbers, partnerships, products, leaders, dates or financials.
-- Only include information that is directly supported by the source pack or is very broadly known and stable; otherwise write "to verify" or "not available".
+- Do not fabricate or guess precise facts. Only include facts you believe are true and stable. Where you are not confident, write "to verify" or "not available".
+- For leadership when no internal database record exists: include the executive leaders you believe are correct from high-confidence general knowledge, but mark the leadership section as needing verification.
+- For milestones when no internal database record exists: populate the timeline using high-confidence company milestones such as founding year, major product launches, funding rounds, acquisitions, public listings, or recent announcements from RSS/user context. Mark uncertain dates or announcements as "to verify".
 - If the source pack is incomplete, say what is missing or what needs verification.
 - Treat private-company funding, valuation and revenue references as funding/commercial signals, not as audited financial performance.
 - Separate facts from interpretation. Do not make weak evidence sound definitive.
-- Latest news/RSS headlines are external signals to verify, not proof on their own.
+- Latest news/RSS headlines are external signals to verify, not proof on their own. Use the first five RSS results provided in the source pack as the raw latest-news feed, and only exclude an item from the slide if it is clearly empty or unusable.
 - Write for a smart business audience that may not be technical.
 - Use clear, direct language and avoid AI hype.
 
@@ -351,9 +365,10 @@ Use exactly this schema and keep each field concise enough to fit a single Power
 
 Field-specific instructions:
 - "verification_banner": if no internal database match is available, this must be the first visible message in the profile. If there is an internal match, leave it blank.
-- "leadership": include named executives only if they appear in the source pack or are very high-confidence general knowledge. If leadership is missing or uncertain, write "Leadership data to verify".
+- "leadership": if internal leadership records exist, use them. If not, include the executive leaders you believe are correct from high-confidence general knowledge and add "to verify" where appropriate. Do not leave the section blank.
 - "funding_commercial_signals": for private companies, use language such as "reported", "funding signal", "commercial signal", or "to verify" where appropriate.
-- "latest_news_signals": include only relevant recent items. If the retrieved articles are weak, duplicated, irrelevant or missing, write that recent external signals require verification.
+- "latest_news_signals": use the latest RSS results from the source pack as the feed. Return up to five article-style bullets using the title and publisher/source where available. If an item appears irrelevant, keep it only if it is among the first five results and label it "verify relevance" rather than silently replacing it.
+- "timeline": if internal milestones exist, use them. If no internal milestones exist, create a useful timeline from high-confidence general knowledge, founding year, product/funding/company announcements, and relevant RSS/user-context signals. Use "to verify" for uncertain items.
 - "risks": include both information-quality risks and business risks where relevant.
 - "next_steps": make these practical actions a human analyst or business team would take before using the one-pager.
 """.strip()
@@ -488,10 +503,12 @@ def default_profile_sections(company: pd.Series, project: pd.Series, intel: Dict
         milestones.append({"year": str(row.get("milestone_year", "")), "text": str(row.get("milestone_text", ""))})
 
     latest_news = []
-    for article in latest_articles[:3]:
+    for article in latest_articles[:5]:
         title = article.get("title", "").strip()
+        source = article.get("source", "").strip()
         if title:
-            latest_news.append(f"{title} — verify relevance before external use")
+            suffix = f" — {source}" if source else ""
+            latest_news.append(f"{title}{suffix} — verify relevance before external use")
     if not latest_news:
         latest_news = ["Latest external news was excluded or unavailable.", "Use internal records and analyst notes as the primary evidence."]
 
@@ -537,9 +554,30 @@ def normalise_profile_sections(raw_text: str, base: Dict[str, Any]) -> Dict[str,
     parsed = extract_json(raw_text) if raw_text else None
     if not parsed:
         return base
+    original_latest_news = as_list(base.get("latest_news_signals"), max_items=5)
+    original_timeline = base.get("timeline", [])
     for key in base:
         if key in parsed and parsed[key]:
             base[key] = parsed[key]
+
+    # Keep the latest-news section populated with the first five RSS feed items.
+    # The LLM can rewrite them, but if it returns fewer than five, append the
+    # raw feed titles so the PowerPoint does not end up with empty news rows.
+    llm_news = as_list(base.get("latest_news_signals"), max_items=5)
+    if original_latest_news:
+        seen = {item.lower() for item in llm_news}
+        for item in original_latest_news:
+            if len(llm_news) >= 5:
+                break
+            if item.lower() not in seen:
+                llm_news.append(item)
+                seen.add(item.lower())
+        base["latest_news_signals"] = llm_news[:5]
+
+    # If the model returns no useful timeline, keep the fallback timeline so the
+    # milestone chart is never empty.
+    if not base.get("timeline") and original_timeline:
+        base["timeline"] = original_timeline
     return base
 
 
@@ -637,7 +675,16 @@ def split_name_role(value: str) -> tuple[str, str]:
     return truncate_text(value, 42), "Role / relevance to verify"
 
 
-def set_shape_text(slide, idx: int, text: Any, font_size: Optional[float] = None, bold: Optional[bool] = None, align=None, max_chars: Optional[int] = None):
+def set_shape_text(
+    slide,
+    idx: int,
+    text: Any,
+    font_size: Optional[float] = None,
+    bold: Optional[bool] = None,
+    align=None,
+    max_chars: Optional[int] = None,
+    font_color: Optional[RGBColor] = None,
+):
     """Replace text in an existing template shape while keeping the slide layout."""
     if idx >= len(slide.shapes):
         return
@@ -658,6 +705,8 @@ def set_shape_text(slide, idx: int, text: Any, font_size: Optional[float] = None
         p.font.size = Pt(font_size)
     if bold is not None:
         p.font.bold = bold
+    if font_color is not None:
+        p.font.color.rgb = font_color
     if align is not None:
         p.alignment = align
 
@@ -715,18 +764,22 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
     slide = prs.slides[0]
     brief_type = str(project.get("project_name", "Company brief")) if hasattr(project, "get") else "Company brief"
     v = build_slide_values(profile, company, brief_type)
+    white = RGBColor(255, 255, 255)
 
     # Header / title area
-    set_shape_text(slide, 2, v["company_name"], font_size=24, bold=True, max_chars=44)
-    set_shape_text(slide, 3, v["subtitle"], font_size=9, max_chars=82)
-    set_shape_text(slide, 5, v["company_type"], font_size=8.5, align=PP_ALIGN.CENTER, max_chars=42)
-    set_shape_text(slide, 7, v["score"], font_size=20, bold=True, align=PP_ALIGN.CENTER, max_chars=5)
-    set_shape_text(slide, 8, "SCORE", font_size=6.5, bold=True, align=PP_ALIGN.CENTER)
+    set_shape_text(slide, 2, v["company_name"], font_size=24, bold=True, max_chars=44, font_color=white)
+    set_shape_text(slide, 3, v["subtitle"], font_size=9, max_chars=82, font_color=white)
+    set_shape_text(slide, 5, v["company_type"], font_size=8.5, align=PP_ALIGN.CENTER, max_chars=42, font_color=white)
+    set_shape_text(slide, 7, v["score"], font_size=20, bold=True, align=PP_ALIGN.CENTER, max_chars=5, font_color=white)
+    set_shape_text(slide, 8, "SCORE", font_size=6.5, bold=True, align=PP_ALIGN.CENTER, font_color=white)
 
-    # Top three narrative cards
-    set_shape_text(slide, 13, v["mission"], font_size=7.8, max_chars=150)
-    set_shape_text(slide, 18, v["growth"], font_size=7.8, max_chars=150)
-    set_shape_text(slide, 23, v["target_market"], font_size=7.8, max_chars=150)
+    # Top three narrative cards — these sit on coloured template boxes, so use white text.
+    set_shape_text(slide, 12, "Mission / positioning", font_size=8.6, bold=True, font_color=white, max_chars=28)
+    set_shape_text(slide, 13, v["mission"], font_size=7.8, max_chars=150, font_color=white)
+    set_shape_text(slide, 17, "Growth direction", font_size=8.6, bold=True, font_color=white, max_chars=28)
+    set_shape_text(slide, 18, v["growth"], font_size=7.8, max_chars=150, font_color=white)
+    set_shape_text(slide, 22, "Target market", font_size=8.6, bold=True, font_color=white, max_chars=28)
+    set_shape_text(slide, 23, v["target_market"], font_size=7.8, max_chars=150, font_color=white)
 
     # Left company snapshot panel
     set_shape_text(slide, 27, v["hq"], font_size=7.6, max_chars=42)
