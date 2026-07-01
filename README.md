@@ -152,3 +152,12 @@ This version includes a few refinements for interview/demo use:
 - If no internal milestone records exist, the prompt asks the model to populate the milestone chart using high-confidence events such as founding year, product launches, funding rounds, public listings or recent announcements, with uncertain items marked as to verify.
 
 As before, latest news, leadership, funding and milestone information should be reviewed before external use.
+
+## Latest fixes
+
+- The app now keeps the PowerPoint slide header text colour from the uploaded template rather than forcing it to white.
+- The left company snapshot panel values are forced to white text so they remain readable on the dark panel.
+- Latest news uses the first five non-empty Google News RSS results for the typed company name. These raw RSS titles are kept in the PowerPoint output to avoid the model replacing them with older general knowledge.
+- News rows are no longer truncated with ellipses by the app; PowerPoint text fitting is used instead.
+- The prompt now explicitly warns that the OpenAI model has a fixed training cutoff. Current leadership, CEO, funding, valuation and recent announcements should be treated as verification-sensitive unless supported by the internal database, user-provided context or latest RSS/news.
+- If no internal milestones are found, the model is instructed to create short, specific timeline milestones such as founding year, product launches, funding rounds, public listings, acquisitions or recent announcements, and to avoid generic wording such as “growth continues”.

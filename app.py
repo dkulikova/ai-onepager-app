@@ -172,6 +172,21 @@ Link: {article.get('link', '')}
     return "\n\n".join(formatted)
 
 
+def format_article_for_slide(article: Dict[str, str]) -> str:
+    """Format a raw RSS entry for the PowerPoint news panel without adding ellipses."""
+    title = re.sub(r"\s+", " ", str(article.get("title", "")).strip())
+    source = str(article.get("source", "")).strip()
+    published = str(article.get("published", "")).strip()
+    # Google News often appends the publisher after " - "; keep the title as returned
+    # because the user explicitly wanted the first five RSS items for the company lookup term.
+    parts = [title]
+    if source and source.lower() not in title.lower():
+        parts.append(source)
+    if published:
+        parts.append(published[:16])
+    return " — ".join([p for p in parts if p])
+
+
 # -----------------------------
 # Matching / project context
 # -----------------------------
@@ -313,13 +328,14 @@ Core rules:
 - If an internal database match is available, use the internal structured records as the primary evidence.
 - If no internal database match is available, still produce a useful first draft by using the user context, local notes if any, latest news/RSS if included, and your high-confidence general knowledge.
 - If no internal database match is available, include this exact warning in the `verification_banner` field: "Not found in the internal database — this profile uses external/contextual information and needs additional verification."
+- Your own model knowledge may be older than today's date. Do not treat your pretrained knowledge as live data. For time-sensitive facts such as current CEO, leadership, valuation, funding, employee count and recent announcements, prefer internal database records, user-provided context and RSS/news items. If relying on general knowledge, explicitly mark the item "to verify".
 - Do not fabricate or guess precise facts. Only include facts you believe are true and stable. Where you are not confident, write "to verify" or "not available".
-- For leadership when no internal database record exists: include the executive leaders you believe are correct from high-confidence general knowledge, but mark the leadership section as needing verification.
-- For milestones when no internal database record exists: populate the timeline using high-confidence company milestones such as founding year, major product launches, funding rounds, acquisitions, public listings, or recent announcements from RSS/user context. Mark uncertain dates or announcements as "to verify".
+- For leadership when no internal database record exists: include the executive leaders you believe are correct from high-confidence general knowledge, but mark each item "to verify" unless it is directly supported by the source pack. Do not include obviously historic or retired leaders if the source pack suggests a leadership change.
+- For milestones when no internal database record exists: populate the timeline with specific, recognisable company events such as founded year, major product launches, funding rounds, public listings, acquisitions or recent announcements from RSS/user context. Avoid generic milestones such as "growth continues". Mark uncertain dates or announcements as "to verify".
 - If the source pack is incomplete, say what is missing or what needs verification.
 - Treat private-company funding, valuation and revenue references as funding/commercial signals, not as audited financial performance.
 - Separate facts from interpretation. Do not make weak evidence sound definitive.
-- Latest news/RSS headlines are external signals to verify, not proof on their own. Use the first five RSS results provided in the source pack as the raw latest-news feed, and only exclude an item from the slide if it is clearly empty or unusable.
+- Latest news/RSS headlines are external signals to verify, not proof on their own. Use the first five RSS results provided in the source pack as the raw latest-news feed. Do not replace them with older model knowledge. If one appears irrelevant, label it "verify relevance" rather than inventing a different item.
 - Write for a smart business audience that may not be technical.
 - Use clear, direct language and avoid AI hype.
 
@@ -352,7 +368,7 @@ Use exactly this schema and keep each field concise enough to fit a single Power
   "leadership": ["Name — role; brief relevance", "Name — role; brief relevance", "Name — role; brief relevance"],
   "key_facts": ["specific fact 1", "specific fact 2", "specific fact 3", "specific fact 4"],
   "funding_commercial_signals": ["signal 1", "signal 2", "signal 3"],
-  "latest_news_signals": ["recent signal 1", "recent signal 2", "recent signal 3"],
+  "latest_news_signals": ["article title 1 — publisher/source if available", "article title 2 — publisher/source if available", "article title 3 — publisher/source if available", "article title 4 — publisher/source if available", "article title 5 — publisher/source if available"],
   "risks": ["risk / caveat 1", "risk / caveat 2", "risk / caveat 3"],
   "timeline": [
     {{"year": "2023", "text": "milestone or signal"}},
@@ -367,8 +383,8 @@ Field-specific instructions:
 - "verification_banner": if no internal database match is available, this must be the first visible message in the profile. If there is an internal match, leave it blank.
 - "leadership": if internal leadership records exist, use them. If not, include the executive leaders you believe are correct from high-confidence general knowledge and add "to verify" where appropriate. Do not leave the section blank.
 - "funding_commercial_signals": for private companies, use language such as "reported", "funding signal", "commercial signal", or "to verify" where appropriate.
-- "latest_news_signals": use the latest RSS results from the source pack as the feed. Return up to five article-style bullets using the title and publisher/source where available. If an item appears irrelevant, keep it only if it is among the first five results and label it "verify relevance" rather than silently replacing it.
-- "timeline": if internal milestones exist, use them. If no internal milestones exist, create a useful timeline from high-confidence general knowledge, founding year, product/funding/company announcements, and relevant RSS/user-context signals. Use "to verify" for uncertain items.
+- "latest_news_signals": use the first five RSS results from the source pack as the feed. Return five article-style bullets wherever five RSS items are present. Use the article title and source/publisher where available. Do not leave empty rows. Do not silently replace RSS items with older model knowledge.
+- "timeline": if internal milestones exist, use them. If no internal milestones exist, create a useful, chronological timeline from high-confidence founding year, product launches, funding/company announcements, public listings/acquisitions and relevant RSS/user-context signals. Keep each milestone short and specific enough for a slide, and avoid generic wording such as "growth continues". Use "to verify" for uncertain items.
 - "risks": include both information-quality risks and business risks where relevant.
 - "next_steps": make these practical actions a human analyst or business team would take before using the one-pager.
 """.strip()
@@ -560,19 +576,11 @@ def normalise_profile_sections(raw_text: str, base: Dict[str, Any]) -> Dict[str,
         if key in parsed and parsed[key]:
             base[key] = parsed[key]
 
-    # Keep the latest-news section populated with the first five RSS feed items.
-    # The LLM can rewrite them, but if it returns fewer than five, append the
-    # raw feed titles so the PowerPoint does not end up with empty news rows.
-    llm_news = as_list(base.get("latest_news_signals"), max_items=5)
+    # Keep the latest-news section tied to the first five raw RSS feed items.
+    # This avoids empty rows and prevents the model from replacing live RSS
+    # titles with older pretrained knowledge.
     if original_latest_news:
-        seen = {item.lower() for item in llm_news}
-        for item in original_latest_news:
-            if len(llm_news) >= 5:
-                break
-            if item.lower() not in seen:
-                llm_news.append(item)
-                seen.add(item.lower())
-        base["latest_news_signals"] = llm_news[:5]
+        base["latest_news_signals"] = original_latest_news[:5]
 
     # If the model returns no useful timeline, keep the fallback timeline so the
     # milestone chart is never empty.
@@ -654,16 +662,18 @@ def resolve_template_path() -> Optional[Path]:
     return None
 
 
-def truncate_text(text: Any, max_chars: int = 180) -> str:
+def truncate_text(text: Any, max_chars: Optional[int] = 180, add_ellipsis: bool = True) -> str:
     value = str(text or "").strip()
     value = re.sub(r"\s+", " ", value)
-    if len(value) <= max_chars:
+    if not max_chars or len(value) <= max_chars:
         return value
-    return value[: max_chars - 1].rstrip() + "…"
+    suffix = "…" if add_ellipsis else ""
+    cut_len = max_chars - len(suffix) if add_ellipsis else max_chars
+    return value[:cut_len].rstrip() + suffix
 
 
-def clean_bullets(value: Any, max_items: int = 5, max_chars: int = 130) -> List[str]:
-    return [truncate_text(item, max_chars=max_chars) for item in as_list(value, max_items=max_items)]
+def clean_bullets(value: Any, max_items: int = 5, max_chars: Optional[int] = 130, add_ellipsis: bool = True) -> List[str]:
+    return [truncate_text(item, max_chars=max_chars, add_ellipsis=add_ellipsis) for item in as_list(value, max_items=max_items)]
 
 
 def split_name_role(value: str) -> tuple[str, str]:
@@ -740,7 +750,7 @@ def build_slide_values(profile: Dict[str, Any], company: pd.Series, brief_type: 
         "what_they_do": clean_bullets(profile.get("what_they_do"), max_items=3, max_chars=94),
         "leadership": clean_bullets(profile.get("leadership"), max_items=4, max_chars=100),
         "funding": clean_bullets(profile.get("funding_commercial_signals"), max_items=3, max_chars=98),
-        "news": clean_bullets(profile.get("latest_news_signals"), max_items=5, max_chars=112),
+        "news": clean_bullets(profile.get("latest_news_signals"), max_items=5, max_chars=None),
         "risks": clean_bullets(profile.get("risks"), max_items=3, max_chars=108),
         "next_steps": clean_bullets(profile.get("next_steps"), max_items=3, max_chars=108),
         "timeline": profile.get("timeline", []),
@@ -766,12 +776,12 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
     v = build_slide_values(profile, company, brief_type)
     white = RGBColor(255, 255, 255)
 
-    # Header / title area
-    set_shape_text(slide, 2, v["company_name"], font_size=24, bold=True, max_chars=44, font_color=white)
-    set_shape_text(slide, 3, v["subtitle"], font_size=9, max_chars=82, font_color=white)
-    set_shape_text(slide, 5, v["company_type"], font_size=8.5, align=PP_ALIGN.CENTER, max_chars=42, font_color=white)
-    set_shape_text(slide, 7, v["score"], font_size=20, bold=True, align=PP_ALIGN.CENTER, max_chars=5, font_color=white)
-    set_shape_text(slide, 8, "SCORE", font_size=6.5, bold=True, align=PP_ALIGN.CENTER, font_color=white)
+    # Header / title area — keep the template's original header colours.
+    set_shape_text(slide, 2, v["company_name"], font_size=24, bold=True, max_chars=44)
+    set_shape_text(slide, 3, v["subtitle"], font_size=9, max_chars=82)
+    set_shape_text(slide, 5, v["company_type"], font_size=8.5, align=PP_ALIGN.CENTER, max_chars=42)
+    set_shape_text(slide, 7, v["score"], font_size=20, bold=True, align=PP_ALIGN.CENTER, max_chars=5)
+    set_shape_text(slide, 8, "SCORE", font_size=6.5, bold=True, align=PP_ALIGN.CENTER)
 
     # Top three narrative cards — these sit on coloured template boxes, so use white text.
     set_shape_text(slide, 12, "Mission / positioning", font_size=8.6, bold=True, font_color=white, max_chars=28)
@@ -781,13 +791,13 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
     set_shape_text(slide, 22, "Target market", font_size=8.6, bold=True, font_color=white, max_chars=28)
     set_shape_text(slide, 23, v["target_market"], font_size=7.8, max_chars=150, font_color=white)
 
-    # Left company snapshot panel
-    set_shape_text(slide, 27, v["hq"], font_size=7.6, max_chars=42)
-    set_shape_text(slide, 30, v["founded"], font_size=7.6, max_chars=18)
-    set_shape_text(slide, 33, v["type"], font_size=7.6, max_chars=42)
-    set_shape_text(slide, 36, v["sector"], font_size=7.6, max_chars=46)
-    set_shape_text(slide, 39, v["employees"], font_size=7.6, max_chars=42)
-    set_shape_text(slide, 42, v["description"], font_size=7.2, max_chars=430)
+    # Left company snapshot panel — these values sit on the dark left panel, so use white text.
+    set_shape_text(slide, 27, v["hq"], font_size=7.6, max_chars=42, font_color=white)
+    set_shape_text(slide, 30, v["founded"], font_size=7.6, max_chars=18, font_color=white)
+    set_shape_text(slide, 33, v["type"], font_size=7.6, max_chars=42, font_color=white)
+    set_shape_text(slide, 36, v["sector"], font_size=7.6, max_chars=46, font_color=white)
+    set_shape_text(slide, 39, v["employees"], font_size=7.6, max_chars=42, font_color=white)
+    set_shape_text(slide, 42, v["description"], font_size=7.0, max_chars=430, font_color=white)
 
     # What they do
     for idx, text in zip([48, 50, 52], v["what_they_do"] + ["Not available / to verify."] * 3):
@@ -807,7 +817,8 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
     # Latest news / signals — the template has five rows across the wide panel
     set_shape_text(slide, 86, "LATEST NEWS / SIGNALS  ·  VERIFY RELEVANCE BEFORE EXTERNAL USE", font_size=8.6, bold=True, max_chars=80)
     for idx, text in zip([88, 90, 92, 94, 96], v["news"] + ["No recent article used / verify external signals."] * 5):
-        set_shape_text(slide, idx, text, font_size=6.9, max_chars=114)
+        # Do not truncate article titles with ellipses; let PowerPoint shrink/wrap text to fit.
+        set_shape_text(slide, idx, text, font_size=6.1, max_chars=None)
 
     # Risks and next steps
     for idx, text in zip([102, 104, 106], v["risks"] + ["Risk / caveat to verify."] * 3):
@@ -827,7 +838,7 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
         if not isinstance(item, dict):
             item = {"year": "", "text": str(item)}
         set_shape_text(slide, year_idx, item.get("year", ""), font_size=7.2, bold=True, align=PP_ALIGN.CENTER, max_chars=8)
-        set_shape_text(slide, text_idx, item.get("text", ""), font_size=5.5, align=PP_ALIGN.CENTER, max_chars=58)
+        set_shape_text(slide, text_idx, item.get("text", ""), font_size=4.8, align=PP_ALIGN.CENTER, max_chars=None)
 
     footer_text = "AI-generated first draft — funding, leadership and news signals require human verification before external use."
     if v.get("verification_banner"):
@@ -850,6 +861,7 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
 # -----------------------------
 st.title("AI Business Briefing Assistant")
 st.caption("Prototype: free-text company request + internal company intelligence database + optional latest news + LLM workflow → editable PowerPoint one-pager")
+st.caption("Data freshness note: internal database records are static demo data; the LLM has a fixed training cutoff, so current leadership/funding facts should be verified against database, user-provided context or latest news before use.")
 
 if not DB_PATH.exists():
     try:
