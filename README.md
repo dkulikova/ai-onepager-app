@@ -189,3 +189,7 @@ As before, latest news, leadership, funding and milestone information should be 
 ## Text fitting and complete-sentence output
 
 The PowerPoint template has fixed-size text boxes, so the app now avoids app-level ellipses and asks the model for compact complete sentences rather than fragments. The app also resizes dense template fields at generation time, lowers font sizes in crowded sections, and uses the company-profile web lookup to populate HQ, founded year, type, sector and employee scale when the internal database has no values. For a true one-page output, long paragraphs are still intentionally constrained by the prompt, but they should appear as complete sentences rather than cut-off text.
+
+
+### Latest visual template fix
+The top narrative cards now preserve the original PowerPoint text-box sizes. BriefIQ only replaces the card body text and lets PowerPoint wrap compact complete sentences naturally inside the template.

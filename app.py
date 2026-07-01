@@ -392,7 +392,7 @@ Use exactly this schema. Write complete but compact sentences that fit a single 
 
 Field-specific instructions:
 - Write complete sentences that fit the slide. Do not use ellipses, sentence fragments, trailing clauses, or intentionally cut-off wording. Prefer shorter complete sentences over long sentences.
-- "company_positioning", "growth_direction" and "target_market": write enough text to naturally fill about three short visual lines in the top coloured cards. Use 18-28 words total, with clear complete phrasing. Do not reduce these fields to a single short line.
+- "company_positioning", "growth_direction" and "target_market": write one compact complete sentence for each, around 18-26 words. Do not insert line breaks or ellipses. The PowerPoint template will wrap the sentence into the original top-card text box.
 - "verification_banner": if no internal database match is available, this must be the first visible message in the profile. If there is an internal match, leave it blank.
 - "company_snapshot": populate the left-hand company snapshot fields. If the company is found in the database, use the internal database first. If it is not found, use the LIVE COMPANY PROFILE WEB LOOKUP, latest news/user context and high-confidence general knowledge. If a field is uncertain, write "to verify" rather than leaving it blank.
 - "leadership": return exactly 3 current global leaders. Include the current global CEO as the first item wherever reasonably available. If internal leadership records exist, use them but limit to the three most relevant global executives. If not, use the LIVE LEADERSHIP WEB LOOKUP. If no live lookup is available, use high-confidence general knowledge and add "to verify" where appropriate. Do not include retired/former CEOs or regional leaders unless explicitly current and globally relevant.
@@ -866,13 +866,14 @@ def resize_shape(slide, idx: int, left=None, top=None, width=None, height=None):
 
 
 
-def format_top_card_text(value: Any, width: int = 30, max_lines: int = 3) -> str:
-    """Return complete wording arranged into up to three neat visual lines.
+def format_top_card_text(value: Any, max_words: int = 26) -> str:
+    """Prepare copy for the three top narrative cards without changing template geometry.
 
-    The top cards in the PowerPoint template look best when they contain more
-    than one short line. This helper keeps full sentences but inserts line
-    breaks so the text reads like a designed card rather than a single-line label.
-    It does not add ellipses or cut words mid-way.
+    The original PowerPoint template already contains correctly-sized body text
+    boxes for Mission / Growth / Target Market. This function therefore returns
+    one compact complete sentence and lets PowerPoint wrap it naturally inside
+    the existing text box. It does not insert manual line breaks, resize the box,
+    or add ellipses.
     """
     if isinstance(value, list):
         raw = " ".join(str(v).strip() for v in value if str(v).strip())
@@ -882,28 +883,13 @@ def format_top_card_text(value: Any, width: int = 30, max_lines: int = 3) -> str
     if not raw:
         return "To verify."
 
-    # Keep full content, but cap extreme verbosity at a sentence boundary when possible.
     words = raw.split()
-    if len(words) > 32:
-        raw = " ".join(words[:32]).rstrip(" ,;:")
-        if not raw.endswith((".", "!", "?")):
-            raw += "."
+    if len(words) > max_words:
+        raw = " ".join(words[:max_words]).rstrip(" ,;:")
 
-    lines = textwrap.wrap(raw, width=width, break_long_words=False, break_on_hyphens=False)
-    if len(lines) <= max_lines:
-        return "\n".join(lines)
-
-    # Rewrap a little wider before falling back, so we retain the full sentence.
-    wider = textwrap.wrap(raw, width=width + 8, break_long_words=False, break_on_hyphens=False)
-    if len(wider) <= max_lines:
-        return "\n".join(wider)
-
-    # Last resort for very long text: keep complete wording as much as possible,
-    # but avoid ellipses and end with punctuation.
-    kept = " ".join(words[:28]).rstrip(" ,;:")
-    if not kept.endswith((".", "!", "?")):
-        kept += "."
-    return "\n".join(textwrap.wrap(kept, width=width, break_long_words=False, break_on_hyphens=False)[:max_lines])
+    if not raw.endswith((".", "!", "?")):
+        raw += "."
+    return raw
 
 def build_slide_values(profile: Dict[str, Any], company: pd.Series, brief_type: str) -> Dict[str, Any]:
     c = company.to_dict() if hasattr(company, "to_dict") else dict(company)
@@ -971,12 +957,11 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
     brief_type = str(project.get("project_name", "Company brief")) if hasattr(project, "get") else "Company brief"
     v = build_slide_values(profile, company, brief_type)
     white = RGBColor(255, 255, 255)
+    top_body_blue = RGBColor(185, 200, 230)
 
     # Resize the most content-heavy template text boxes so full sentences can fit.
     # This keeps the visual style of the supplied template but gives body text more room.
-    # Top narrative cards
-    for idx in [13, 18, 23]:
-        resize_shape(slide, idx, height=0.60)
+    # Top narrative cards: keep the original template box sizes.
     # Left description panel
     resize_shape(slide, 42, height=1.35)
     # Three feature columns
@@ -1005,13 +990,12 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
     set_shape_text(slide, 7, v["score"], font_size=20, bold=True, align=PP_ALIGN.CENTER, max_chars=5)
     set_shape_text(slide, 8, "SCORE", font_size=6.5, bold=True, align=PP_ALIGN.CENTER)
 
-    # Top three narrative cards — these sit on coloured template boxes, so use white text.
-    set_shape_text(slide, 12, "Mission / positioning", font_size=8.6, bold=True, font_color=white, max_chars=28)
-    set_shape_text(slide, 13, v["mission"], font_size=5.2, font_color=white, align=PP_ALIGN.CENTER)
-    set_shape_text(slide, 17, "Growth direction", font_size=8.6, bold=True, font_color=white, max_chars=28)
-    set_shape_text(slide, 18, v["growth"], font_size=5.2, font_color=white, align=PP_ALIGN.CENTER)
-    set_shape_text(slide, 22, "Target market", font_size=8.6, bold=True, font_color=white, max_chars=28)
-    set_shape_text(slide, 23, v["target_market"], font_size=5.2, font_color=white, align=PP_ALIGN.CENTER)
+    # Top three narrative cards — keep the template's original text-box sizes.
+    # Only replace the body copy; do not resize or reposition these text boxes.
+    # The original template headings remain in place.
+    set_shape_text(slide, 13, v["mission"], font_size=7.2, font_color=top_body_blue)
+    set_shape_text(slide, 18, v["growth"], font_size=7.2, font_color=top_body_blue)
+    set_shape_text(slide, 23, v["target_market"], font_size=7.2, font_color=top_body_blue)
 
     # Left company snapshot panel — these values sit on the dark left panel, so use white text.
     set_shape_text(slide, 27, v["hq"], font_size=7.6, max_chars=42, font_color=white)
