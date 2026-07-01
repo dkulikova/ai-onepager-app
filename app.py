@@ -262,6 +262,7 @@ def build_source_pack(
     intel: Dict[str, pd.DataFrame],
     has_internal_match: bool = True,
     match_message: str = "",
+    live_leadership_lookup: str = "",
 ) -> str:
     company_context = "\n".join([f"- {col}: {selected_company[col]}" for col in selected_company.index])
     project_context = "\n".join([f"- {col}: {selected_project[col]}" for col in selected_project.index])
@@ -284,6 +285,9 @@ STRUCTURED COMPANY DATA
 
 EXECUTIVE LEADERSHIP DATA
 {format_df_records('Leadership records', intel.get('leadership', pd.DataFrame()))}
+
+LIVE LEADERSHIP WEB LOOKUP
+{live_leadership_lookup or 'No live leadership lookup was run or no live leadership results were returned.'}
 
 PRODUCTS / SERVICES DATA
 {format_df_records('Product records', intel.get('products', pd.DataFrame()))}
@@ -328,9 +332,10 @@ Core rules:
 - If an internal database match is available, use the internal structured records as the primary evidence.
 - If no internal database match is available, still produce a useful first draft by using the user context, local notes if any, latest news/RSS if included, and your high-confidence general knowledge.
 - If no internal database match is available, include this exact warning in the `verification_banner` field: "Not found in the internal database — this profile uses external/contextual information and needs additional verification."
-- Your own model knowledge may be older than today's date. Do not treat your pretrained knowledge as live data. For time-sensitive facts such as current CEO, leadership, valuation, funding, employee count and recent announcements, prefer internal database records, user-provided context and RSS/news items. If relying on general knowledge, explicitly mark the item "to verify".
+- Your own model knowledge may be older than today's date. Do not treat your pretrained knowledge as live data. For time-sensitive facts such as current global CEO, global executive leadership, valuation, funding, employee count and recent announcements, prefer internal database records, LIVE LEADERSHIP WEB LOOKUP, user-provided context and RSS/news items. If relying on general knowledge, explicitly mark the item "to verify".
 - Do not fabricate or guess precise facts. Only include facts you believe are true and stable. Where you are not confident, write "to verify" or "not available".
-- For leadership when no internal database record exists: include the executive leaders you believe are correct from high-confidence general knowledge, but mark each item "to verify" unless it is directly supported by the source pack. Do not include obviously historic or retired leaders if the source pack suggests a leadership change.
+- For leadership, return exactly 3 people. Prioritise: (1) current global CEO, (2) current global executive leadership such as CFO, COO, President, CTO, Chief Product Officer, Chief Scientist, Chair/Founder where materially relevant. Do not include regional leaders, board-only roles, retired executives or former CEOs unless the role is clearly current in the source pack.
+- For leadership when no internal database record exists: use the LIVE LEADERSHIP WEB LOOKUP if available. If no live lookup is available, include the current global CEO and two current global executive leaders you believe are correct from high-confidence general knowledge, but mark each item "to verify". Do not include obviously historic or retired leaders.
 - For milestones when no internal database record exists: populate the timeline with specific, recognisable company events such as founded year, major product launches, funding rounds, public listings, acquisitions or recent announcements from RSS/user context. Avoid generic milestones such as "growth continues". Mark uncertain dates or announcements as "to verify".
 - If the source pack is incomplete, say what is missing or what needs verification.
 - Treat private-company funding, valuation and revenue references as funding/commercial signals, not as audited financial performance.
@@ -365,7 +370,7 @@ Use exactly this schema and keep each field concise enough to fit a single Power
   "target_market": "1-2 sentences on target users/customers/market",
   "company_description": "2-3 sentences suitable for a left-side profile panel",
   "what_they_do": ["specific bullet 1", "specific bullet 2", "specific bullet 3"],
-  "leadership": ["Name — role; brief relevance", "Name — role; brief relevance", "Name — role; brief relevance"],
+  "leadership": ["Current global CEO — role; brief relevance", "Current global executive leader — role; brief relevance", "Current global executive leader — role; brief relevance"],
   "key_facts": ["specific fact 1", "specific fact 2", "specific fact 3", "specific fact 4"],
   "funding_commercial_signals": ["signal 1", "signal 2", "signal 3"],
   "latest_news_signals": ["article title 1 — publisher/source if available", "article title 2 — publisher/source if available", "article title 3 — publisher/source if available", "article title 4 — publisher/source if available", "article title 5 — publisher/source if available"],
@@ -381,7 +386,7 @@ Use exactly this schema and keep each field concise enough to fit a single Power
 
 Field-specific instructions:
 - "verification_banner": if no internal database match is available, this must be the first visible message in the profile. If there is an internal match, leave it blank.
-- "leadership": if internal leadership records exist, use them. If not, include the executive leaders you believe are correct from high-confidence general knowledge and add "to verify" where appropriate. Do not leave the section blank.
+- "leadership": return exactly 3 current global leaders. Include the current global CEO as the first item wherever reasonably available. If internal leadership records exist, use them but limit to the three most relevant global executives. If not, use the LIVE LEADERSHIP WEB LOOKUP. If no live lookup is available, use high-confidence general knowledge and add "to verify" where appropriate. Do not include retired/former CEOs or regional leaders unless explicitly current and globally relevant.
 - "funding_commercial_signals": for private companies, use language such as "reported", "funding signal", "commercial signal", or "to verify" where appropriate.
 - "latest_news_signals": use the first five RSS results from the source pack as the feed. Return five article-style bullets wherever five RSS items are present. Use the article title and source/publisher where available. Do not leave empty rows. Do not silently replace RSS items with older model knowledge.
 - "timeline": if internal milestones exist, use them. If no internal milestones exist, create a useful, chronological timeline from high-confidence founding year, product launches, funding/company announcements, public listings/acquisitions and relevant RSS/user-context signals. Keep each milestone short and specific enough for a slide, and avoid generic wording such as "growth continues". Use "to verify" for uncertain items.
@@ -416,6 +421,7 @@ Rules:
 - Do not introduce new facts.
 - Be concise, direct and useful.
 - Treat latest news as signals to verify, not definitive evidence.
+- Check that the leadership section includes exactly 3 people, starting with the current global CEO where available, and does not include retired/former CEOs or regional-only leaders.
 - If the company was not found in the internal database, check that the profile clearly starts with the not-in-database verification warning.
 
 SOURCE PACK:
@@ -447,6 +453,47 @@ def call_openai(prompt: str, model: str = "gpt-4.1-mini") -> str:
     return response.output_text
 
 
+
+
+
+
+def lookup_current_global_leadership(company_name: str) -> str:
+    """Use OpenAI hosted web search to retrieve current global leadership for an external company.
+
+    This is only used as additional source-pack context. The final profile prompt still
+    has to decide what to include and mark uncertain items for verification.
+    """
+    api_key = get_secret("OPENAI_API_KEY")
+    if not api_key:
+        return "No live leadership lookup was run because OPENAI_API_KEY is not configured."
+
+    from openai import OpenAI
+    client = OpenAI(api_key=api_key)
+    prompt = f"""
+Find the current global CEO and current global executive leadership for: {company_name}.
+
+Return ONLY concise plain text with exactly three bullets:
+1. Current global CEO — role — source or verification note
+2. Current global executive leader — role — source or verification note
+3. Current global executive leader — role — source or verification note
+
+Rules:
+- Prioritise official company leadership pages, investor relations pages, company newsroom announcements, or highly reputable business/news sources.
+- Use global company leadership only. Do not use regional country heads unless no global leadership information is available.
+- Do not include retired leaders, former CEOs, former founders in non-current roles, or board-only figures unless clearly part of current executive leadership.
+- If a current role is uncertain, write "to verify".
+""".strip()
+
+    try:
+        response = client.responses.create(
+            model="gpt-4.1-mini",
+            tools=[{"type": "web_search"}],
+            tool_choice="required",
+            input=prompt,
+        )
+        return response.output_text.strip()
+    except Exception as exc:
+        return f"Live leadership lookup failed or is unavailable: {exc}"
 
 
 def run_llm(prompt: str, provider: str = "OpenAI") -> str:
@@ -539,7 +586,7 @@ def default_profile_sections(company: pd.Series, project: pd.Series, intel: Dict
         "target_market": str(c.get("target_market", project.get("target_sector", "Target market to be confirmed."))),
         "company_description": str(c.get("short_description", f"{c.get('company_name', 'The company')} operates in {c.get('sector', 'its sector')}.")).strip(),
         "what_they_do": df_to_bullets(intel.get("products", pd.DataFrame()), ["product_name", "description"], 4) or [str(c.get("recent_news", "Products to verify."))],
-        "leadership": df_to_bullets(intel.get("leadership", pd.DataFrame()), ["executive_name", "role"], 4) or ["Leadership not available in internal database."],
+        "leadership": df_to_bullets(intel.get("leadership", pd.DataFrame()), ["executive_name", "role"], 3) or ["Leadership not available in internal database."],
         "key_facts": [
             f"HQ: {c.get('hq_location', 'Not available')}",
             f"Founded: {c.get('founded_year', 'Not available')}",
@@ -748,7 +795,7 @@ def build_slide_values(profile: Dict[str, Any], company: pd.Series, brief_type: 
         "employees": c.get("employee_count", "Not available"),
         "description": ((verification_banner + " ") if verification_banner else "") + str(profile.get("company_description", "Company description to verify.")),
         "what_they_do": clean_bullets(profile.get("what_they_do"), max_items=3, max_chars=94),
-        "leadership": clean_bullets(profile.get("leadership"), max_items=4, max_chars=100),
+        "leadership": clean_bullets(profile.get("leadership"), max_items=3, max_chars=100),
         "funding": clean_bullets(profile.get("funding_commercial_signals"), max_items=3, max_chars=98),
         "news": clean_bullets(profile.get("latest_news_signals"), max_items=5, max_chars=None),
         "risks": clean_bullets(profile.get("risks"), max_items=3, max_chars=108),
@@ -803,12 +850,15 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
     for idx, text in zip([48, 50, 52], v["what_they_do"] + ["Not available / to verify."] * 3):
         set_shape_text(slide, idx, text, font_size=7.4, max_chars=98)
 
-    # Leadership — separate name and role lines
-    leadership = v["leadership"] + ["Leadership data to verify — Role to verify"] * 4
-    for item, name_idx, role_idx in zip(leadership[:4], [59, 63, 67, 71], [60, 64, 68, 72]):
+    # Leadership — only three current global leaders are shown on the slide.
+    leadership = v["leadership"] + ["Leadership data to verify — Role to verify"] * 3
+    for item, name_idx, role_idx in zip(leadership[:3], [59, 63, 67], [60, 64, 68]):
         name, role = split_name_role(item)
         set_shape_text(slide, name_idx, name, font_size=7.0, bold=True, max_chars=42)
         set_shape_text(slide, role_idx, role, font_size=5.8, max_chars=58)
+    # Clear the fourth leadership slot in the template.
+    set_shape_text(slide, 71, "", font_size=7.0)
+    set_shape_text(slide, 72, "", font_size=5.8)
 
     # Funding / commercial signals
     for idx, text in zip([78, 80, 82], v["funding"] + ["Funding / commercial signal to verify."] * 3):
@@ -859,7 +909,7 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
 # -----------------------------
 # Streamlit UI
 # -----------------------------
-st.title("AI Business Briefing Assistant")
+st.title("BriefIQ")
 st.caption("Prototype: free-text company request + internal company intelligence database + optional latest news + LLM workflow → editable PowerPoint one-pager")
 st.caption("Data freshness note: internal database records are static demo data; the LLM has a fixed training cutoff, so current leadership/funding facts should be verified against database, user-provided context or latest news before use.")
 
@@ -935,7 +985,7 @@ else:
     st.info("Latest news is excluded. The one-pager will rely on internal data, notes and your added context.")
 
 st.subheader("5. Generate output")
-st.write("This runs the workflow: interpret request → match internal company intelligence → retrieve notes → optional news lookup → draft structured profile → review → export editable PowerPoint.")
+st.write("This runs the workflow: interpret request → match internal company intelligence → retrieve notes → optional news lookup → live leadership lookup where needed → draft structured profile → review → export editable PowerPoint.")
 
 if st.button("Generate one-pager", type="primary"):
     selected_project = build_project_context(brief_type, extra_notes)
@@ -944,6 +994,10 @@ if st.button("Generate one-pager", type="primary"):
 
     with st.spinner("Retrieving latest news signals..." if include_latest_news else "Preparing source pack..."):
         latest_articles = get_latest_company_articles(selected_company.get("company_name", company_query), max_articles=5) if include_latest_news else []
+        internal_leadership_missing = intel.get("leadership", pd.DataFrame()).empty
+        live_leadership_lookup = ""
+        if provider == "OpenAI" and internal_leadership_missing:
+            live_leadership_lookup = lookup_current_global_leadership(str(selected_company.get("company_name", company_query)))
         source_pack = build_source_pack(
             selected_company,
             selected_project,
@@ -953,6 +1007,7 @@ if st.button("Generate one-pager", type="primary"):
             intel,
             has_internal_match=has_internal_match,
             match_message=match_message,
+            live_leadership_lookup=live_leadership_lookup,
         )
 
     base_profile = default_profile_sections(selected_company, selected_project, intel, latest_articles)
