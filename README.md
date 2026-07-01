@@ -193,3 +193,13 @@ The PowerPoint template has fixed-size text boxes, so the app now avoids app-lev
 
 ### Latest visual template fix
 The top narrative cards now preserve the original PowerPoint text-box sizes. BriefIQ only replaces the card body text and lets PowerPoint wrap compact complete sentences naturally inside the template.
+
+
+## Typography update
+
+The PowerPoint output uses consistent body typography across the main content boxes. Dense sections such as company description, what they do, funding/commercial signals, latest news, risks, next steps and milestones use a readable slide-body size rather than very small mixed font sizes. The top card and header styles remain aligned to the supplied template.
+
+
+## Latest visual update
+
+The PowerPoint export now uses larger, more consistent body text across the main boxes, while keeping the original one-pager template layout.

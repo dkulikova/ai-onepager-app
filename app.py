@@ -959,8 +959,16 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
     white = RGBColor(255, 255, 255)
     top_body_blue = RGBColor(185, 200, 230)
 
-    # Resize the most content-heavy template text boxes so full sentences can fit.
-    # This keeps the visual style of the supplied template but gives body text more room.
+    # Consistent body typography across the one-pager.
+    # Earlier versions used very small fonts in some content boxes (4–5pt),
+    # which made the slide look inconsistent and hard to read. Keep the
+    # headings/title sizes as-is, but standardise the main content areas at a larger readable size.
+    body_font = 7.2
+    compact_body_font = 6.7
+    timeline_font = 6.4
+
+    # Keep the supplied template layout, but allow the densest text areas to fit
+    # readable, consistent body fonts.
     # Top narrative cards: keep the original template box sizes.
     # Left description panel
     resize_shape(slide, 42, height=1.35)
@@ -993,47 +1001,47 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
     # Top three narrative cards — keep the template's original text-box sizes.
     # Only replace the body copy; do not resize or reposition these text boxes.
     # The original template headings remain in place.
-    set_shape_text(slide, 13, v["mission"], font_size=7.2, font_color=top_body_blue)
-    set_shape_text(slide, 18, v["growth"], font_size=7.2, font_color=top_body_blue)
-    set_shape_text(slide, 23, v["target_market"], font_size=7.2, font_color=top_body_blue)
+    set_shape_text(slide, 13, v["mission"], font_size=7.8, font_color=top_body_blue)
+    set_shape_text(slide, 18, v["growth"], font_size=7.8, font_color=top_body_blue)
+    set_shape_text(slide, 23, v["target_market"], font_size=7.8, font_color=top_body_blue)
 
     # Left company snapshot panel — these values sit on the dark left panel, so use white text.
-    set_shape_text(slide, 27, v["hq"], font_size=7.6, max_chars=42, font_color=white)
-    set_shape_text(slide, 30, v["founded"], font_size=7.6, max_chars=18, font_color=white)
-    set_shape_text(slide, 33, v["type"], font_size=7.6, max_chars=42, font_color=white)
-    set_shape_text(slide, 36, v["sector"], font_size=7.6, max_chars=46, font_color=white)
-    set_shape_text(slide, 39, v["employees"], font_size=7.6, max_chars=42, font_color=white)
-    set_shape_text(slide, 42, v["description"], font_size=4.9, font_color=white)
+    set_shape_text(slide, 27, v["hq"], font_size=8.2, max_chars=42, font_color=white)
+    set_shape_text(slide, 30, v["founded"], font_size=8.2, max_chars=18, font_color=white)
+    set_shape_text(slide, 33, v["type"], font_size=8.2, max_chars=42, font_color=white)
+    set_shape_text(slide, 36, v["sector"], font_size=8.2, max_chars=46, font_color=white)
+    set_shape_text(slide, 39, v["employees"], font_size=8.2, max_chars=42, font_color=white)
+    set_shape_text(slide, 42, v["description"], font_size=body_font, font_color=white)
 
     # What they do
     for idx, text in zip([48, 50, 52], v["what_they_do"] + ["Not available / to verify."] * 3):
-        set_shape_text(slide, idx, text, font_size=5.0)
+        set_shape_text(slide, idx, text, font_size=body_font)
 
     # Leadership — only three current global leaders are shown on the slide.
     leadership = v["leadership"] + ["Leadership data to verify — Role to verify"] * 3
     for item, name_idx, role_idx in zip(leadership[:3], [59, 63, 67], [60, 64, 68]):
         name, role = split_name_role(item)
-        set_shape_text(slide, name_idx, name, font_size=7.0, bold=True, max_chars=42)
-        set_shape_text(slide, role_idx, role, font_size=4.8)
+        set_shape_text(slide, name_idx, name, font_size=7.6, bold=True, max_chars=42)
+        set_shape_text(slide, role_idx, role, font_size=compact_body_font)
     # Clear the fourth leadership slot in the template.
-    set_shape_text(slide, 71, "", font_size=7.0)
+    set_shape_text(slide, 71, "", font_size=7.6)
     set_shape_text(slide, 72, "", font_size=5.8)
 
     # Funding / commercial signals
     for idx, text in zip([78, 80, 82], v["funding"] + ["Funding / commercial signal to verify."] * 3):
-        set_shape_text(slide, idx, text, font_size=5.0)
+        set_shape_text(slide, idx, text, font_size=body_font)
 
     # Latest news / signals — the template has five rows across the wide panel
-    set_shape_text(slide, 86, "LATEST NEWS / SIGNALS  ·  VERIFY RELEVANCE BEFORE EXTERNAL USE", font_size=8.6, bold=True, max_chars=80)
+    set_shape_text(slide, 86, "LATEST NEWS / SIGNALS  ·  VERIFY RELEVANCE BEFORE EXTERNAL USE", font_size=9.0, bold=True, max_chars=80)
     for idx, text in zip([88, 90, 92, 94, 96], v["news"] + ["No recent article used / verify external signals."] * 5):
         # Do not truncate article titles with ellipses; let PowerPoint shrink/wrap text to fit.
-        set_shape_text(slide, idx, text, font_size=4.1, max_chars=None)
+        set_shape_text(slide, idx, text, font_size=compact_body_font, max_chars=None)
 
     # Risks and next steps
     for idx, text in zip([102, 104, 106], v["risks"] + ["Risk / caveat to verify."] * 3):
-        set_shape_text(slide, idx, text, font_size=4.9)
+        set_shape_text(slide, idx, text, font_size=body_font)
     for idx, text in zip([112, 114, 116], v["next_steps"] + ["Next step to verify."] * 3):
-        set_shape_text(slide, idx, text, font_size=4.9)
+        set_shape_text(slide, idx, text, font_size=body_font)
 
     # Timeline / milestones
     timeline = v["timeline"] if isinstance(v["timeline"], list) else []
@@ -1046,8 +1054,8 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
         item = timeline[i] if i < len(timeline) else {"year": "", "text": ""}
         if not isinstance(item, dict):
             item = {"year": "", "text": str(item)}
-        set_shape_text(slide, year_idx, item.get("year", ""), font_size=7.2, bold=True, align=PP_ALIGN.CENTER, max_chars=8)
-        set_shape_text(slide, text_idx, item.get("text", ""), font_size=3.7, align=PP_ALIGN.CENTER, max_chars=None)
+        set_shape_text(slide, year_idx, item.get("year", ""), font_size=7.8, bold=True, align=PP_ALIGN.CENTER, max_chars=8)
+        set_shape_text(slide, text_idx, item.get("text", ""), font_size=timeline_font, align=PP_ALIGN.CENTER, max_chars=None)
 
     footer_text = "AI-generated first draft — funding, leadership and news signals require human verification before external use."
     if v.get("verification_banner"):
@@ -1056,7 +1064,7 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
         slide,
         135,
         footer_text,
-        font_size=5.9,
+        font_size=6.4,
         align=PP_ALIGN.RIGHT,
     )
 
