@@ -263,6 +263,7 @@ def build_source_pack(
     has_internal_match: bool = True,
     match_message: str = "",
     live_leadership_lookup: str = "",
+    live_company_profile_lookup: str = "",
 ) -> str:
     company_context = "\n".join([f"- {col}: {selected_company[col]}" for col in selected_company.index])
     project_context = "\n".join([f"- {col}: {selected_project[col]}" for col in selected_project.index])
@@ -285,6 +286,9 @@ STRUCTURED COMPANY DATA
 
 EXECUTIVE LEADERSHIP DATA
 {format_df_records('Leadership records', intel.get('leadership', pd.DataFrame()))}
+
+LIVE COMPANY PROFILE WEB LOOKUP
+{live_company_profile_lookup or 'No live company profile lookup was run or no live company profile results were returned.'}
 
 LIVE LEADERSHIP WEB LOOKUP
 {live_leadership_lookup or 'No live leadership lookup was run or no live leadership results were returned.'}
@@ -337,7 +341,7 @@ Core rules:
 - For leadership, return exactly 3 people. Prioritise: (1) current global CEO, (2) current global executive leadership such as CFO, COO, President, CTO, Chief Product Officer, Chief Scientist, Chair/Founder where materially relevant. Do not include regional leaders, board-only roles, retired executives or former CEOs unless the role is clearly current in the source pack.
 - For leadership when no internal database record exists: use the LIVE LEADERSHIP WEB LOOKUP if available. If no live lookup is available, include the current global CEO and two current global executive leaders you believe are correct from high-confidence general knowledge, but mark each item "to verify". Do not include obviously historic or retired leaders.
 - For milestones when no internal database record exists: populate the timeline with specific, recognisable company events such as founded year, major product launches, funding rounds, public listings, acquisitions or recent announcements from RSS/user context. Avoid generic milestones such as "growth continues". Mark uncertain dates or announcements as "to verify".
-- If the source pack is incomplete, say what is missing or what needs verification.
+- If the source pack is incomplete, say what is missing or what needs verification. For companies not found in the database, use the live company profile web lookup to populate HQ, founded year, company type, sector and employee scale where available.
 - Treat private-company funding, valuation and revenue references as funding/commercial signals, not as audited financial performance.
 - Separate facts from interpretation. Do not make weak evidence sound definitive.
 - Latest news/RSS headlines are external signals to verify, not proof on their own. Use the first five RSS results provided in the source pack as the raw latest-news feed. Do not replace them with older model knowledge. If one appears irrelevant, label it "verify relevance" rather than inventing a different item.
@@ -361,35 +365,38 @@ SOURCE PACK:
 {source_pack}
 
 Return ONLY valid JSON. Do not include markdown, commentary, citations outside the JSON, or code fences.
-Use exactly this schema and keep each field concise enough to fit a single PowerPoint slide:
+Use exactly this schema. Write complete but compact sentences that fit a single PowerPoint slide. Do not use ellipses or unfinished text:
 {{
   "headline": "short title for the profile",
   "verification_banner": "use an empty string if the company was found in the internal database; otherwise include the required not-in-database verification warning",
-  "company_positioning": "1-2 sentences on mission, positioning and differentiation",
-  "growth_direction": "1-2 sentences on likely growth direction or strategic direction, based only on the source pack",
-  "target_market": "1-2 sentences on target users/customers/market",
-  "company_description": "2-3 sentences suitable for a left-side profile panel",
-  "what_they_do": ["specific bullet 1", "specific bullet 2", "specific bullet 3"],
+  "company_positioning": "one complete sentence, maximum 18 words, on mission, positioning and differentiation",
+  "growth_direction": "one complete sentence, maximum 18 words, on likely growth or strategic direction",
+  "target_market": "one complete sentence, maximum 18 words, on target users/customers/market",
+  "company_description": "two complete sentences, maximum 45 words total, suitable for a left-side profile panel",
+  "company_snapshot": {"hq": "global HQ or to verify", "founded": "founded year or to verify", "company_type": "private/public/subsidiary/status or to verify", "sector": "sector or to verify", "employees": "employee count/scale or to verify"},
+  "what_they_do": ["complete sentence, maximum 14 words", "complete sentence, maximum 14 words", "complete sentence, maximum 14 words"],
   "leadership": ["Current global CEO — role; brief relevance", "Current global executive leader — role; brief relevance", "Current global executive leader — role; brief relevance"],
   "key_facts": ["specific fact 1", "specific fact 2", "specific fact 3", "specific fact 4"],
-  "funding_commercial_signals": ["signal 1", "signal 2", "signal 3"],
+  "funding_commercial_signals": ["complete sentence, maximum 16 words", "complete sentence, maximum 16 words", "complete sentence, maximum 16 words"],
   "latest_news_signals": ["article title 1 — publisher/source if available", "article title 2 — publisher/source if available", "article title 3 — publisher/source if available", "article title 4 — publisher/source if available", "article title 5 — publisher/source if available"],
-  "risks": ["risk / caveat 1", "risk / caveat 2", "risk / caveat 3"],
+  "risks": ["complete sentence, maximum 14 words", "complete sentence, maximum 14 words", "complete sentence, maximum 14 words"],
   "timeline": [
     {{"year": "2023", "text": "milestone or signal"}},
     {{"year": "2024", "text": "milestone or signal"}},
     {{"year": "2025", "text": "milestone or signal"}},
     {{"year": "2026", "text": "milestone, signal or to verify"}}
   ],
-  "next_steps": ["specific next step 1", "specific next step 2", "specific next step 3"]
+  "next_steps": ["complete sentence, maximum 14 words", "complete sentence, maximum 14 words", "complete sentence, maximum 14 words"]
 }}
 
 Field-specific instructions:
+- Write complete sentences that fit the slide. Do not use ellipses, sentence fragments, trailing clauses, or intentionally cut-off wording. Prefer shorter complete sentences over long sentences.
 - "verification_banner": if no internal database match is available, this must be the first visible message in the profile. If there is an internal match, leave it blank.
+- "company_snapshot": populate the left-hand company snapshot fields. If the company is found in the database, use the internal database first. If it is not found, use the LIVE COMPANY PROFILE WEB LOOKUP, latest news/user context and high-confidence general knowledge. If a field is uncertain, write "to verify" rather than leaving it blank.
 - "leadership": return exactly 3 current global leaders. Include the current global CEO as the first item wherever reasonably available. If internal leadership records exist, use them but limit to the three most relevant global executives. If not, use the LIVE LEADERSHIP WEB LOOKUP. If no live lookup is available, use high-confidence general knowledge and add "to verify" where appropriate. Do not include retired/former CEOs or regional leaders unless explicitly current and globally relevant.
 - "funding_commercial_signals": for private companies, use language such as "reported", "funding signal", "commercial signal", or "to verify" where appropriate.
 - "latest_news_signals": use the first five RSS results from the source pack as the feed. Return five article-style bullets wherever five RSS items are present. Use the article title and source/publisher where available. Do not leave empty rows. Do not silently replace RSS items with older model knowledge.
-- "timeline": if internal milestones exist, use them. If no internal milestones exist, create a useful, chronological timeline from high-confidence founding year, product launches, funding/company announcements, public listings/acquisitions and relevant RSS/user-context signals. Keep each milestone short and specific enough for a slide, and avoid generic wording such as "growth continues". Use "to verify" for uncertain items.
+- "timeline": if internal milestones exist, use them. If no internal milestones exist, create a useful, chronological timeline from high-confidence founding year, product launches, funding/company announcements, public listings/acquisitions and relevant RSS/user-context signals. Each milestone must be a complete compact sentence of 8 words or fewer. Avoid generic wording such as "growth continues". Use "to verify" for uncertain items.
 - "risks": include both information-quality risks and business risks where relevant.
 - "next_steps": make these practical actions a human analyst or business team would take before using the one-pager.
 """.strip()
@@ -455,6 +462,52 @@ def call_openai(prompt: str, model: str = "gpt-4.1-mini") -> str:
 
 
 
+
+
+def lookup_current_company_profile(company_name: str) -> str:
+    """Use OpenAI hosted web search to retrieve current company profile fields for external companies.
+
+    This is used when the company is not in the internal database. It gives the
+    main generation prompt fresher context for the left-hand snapshot fields,
+    mission/positioning and milestone suggestions.
+    """
+    api_key = get_secret("OPENAI_API_KEY")
+    if not api_key:
+        return "No live company profile lookup was run because OPENAI_API_KEY is not configured."
+
+    from openai import OpenAI
+    client = OpenAI(api_key=api_key)
+    prompt = f"""
+Find current, high-confidence company profile information for: {company_name}.
+
+Return concise plain text with these headings:
+- Global HQ
+- Founded year
+- Company type / listing status
+- Sector
+- Employees / scale, if available
+- Mission or company positioning
+- Main products/services
+- Recent milestones or announcements
+
+Rules:
+- Prioritise official company pages, investor relations pages, annual reports, company newsroom announcements, or highly reputable business/news sources.
+- Use global company information, not regional subsidiaries, unless the company itself is regional.
+- If a field is not confidently available, write "not available / to verify".
+- Do not use stale leadership or retired executives.
+- Keep the output concise; this will be used as source material for a one-slide briefing.
+""".strip()
+
+    try:
+        response = client.responses.create(
+            model="gpt-4.1-mini",
+            tools=[{"type": "web_search"}],
+            tool_choice="required",
+            input=prompt,
+        )
+        return response.output_text.strip()
+    except Exception as exc:
+        return f"Live company profile lookup failed or is unavailable: {exc}"
 
 
 def lookup_current_global_leadership(company_name: str) -> str:
@@ -584,7 +637,14 @@ def default_profile_sections(company: pd.Series, project: pd.Series, intel: Dict
         "company_positioning": str(c.get("mission", "Mission not available.")),
         "growth_direction": str(c.get("expansion_signal", "Growth direction needs to be verified.")),
         "target_market": str(c.get("target_market", project.get("target_sector", "Target market to be confirmed."))),
-        "company_description": str(c.get("short_description", f"{c.get('company_name', 'The company')} operates in {c.get('sector', 'its sector')}.")).strip(),
+        "company_description": str(c.get("short_description", f"{c.get('company_name', 'The company')} operates in {c.get('sector', 'its sector')}." )).strip(),
+        "company_snapshot": {
+            "hq": str(c.get("hq_location", "Not available")),
+            "founded": str(c.get("founded_year", "Not available")),
+            "company_type": str(c.get("company_type", "Not available")),
+            "sector": str(c.get("sector", "Not available")),
+            "employees": str(c.get("employee_count", "Not available")),
+        },
         "what_they_do": df_to_bullets(intel.get("products", pd.DataFrame()), ["product_name", "description"], 4) or [str(c.get("recent_news", "Products to verify."))],
         "leadership": df_to_bullets(intel.get("leadership", pd.DataFrame()), ["executive_name", "role"], 3) or ["Leadership not available in internal database."],
         "key_facts": [
@@ -709,7 +769,7 @@ def resolve_template_path() -> Optional[Path]:
     return None
 
 
-def truncate_text(text: Any, max_chars: Optional[int] = 180, add_ellipsis: bool = True) -> str:
+def truncate_text(text: Any, max_chars: Optional[int] = 180, add_ellipsis: bool = False) -> str:
     value = str(text or "").strip()
     value = re.sub(r"\s+", " ", value)
     if not max_chars or len(value) <= max_chars:
@@ -719,7 +779,7 @@ def truncate_text(text: Any, max_chars: Optional[int] = 180, add_ellipsis: bool 
     return value[:cut_len].rstrip() + suffix
 
 
-def clean_bullets(value: Any, max_items: int = 5, max_chars: Optional[int] = 130, add_ellipsis: bool = True) -> List[str]:
+def clean_bullets(value: Any, max_items: int = 5, max_chars: Optional[int] = None, add_ellipsis: bool = False) -> List[str]:
     return [truncate_text(item, max_chars=max_chars, add_ellipsis=add_ellipsis) for item in as_list(value, max_items=max_items)]
 
 
@@ -742,7 +802,13 @@ def set_shape_text(
     max_chars: Optional[int] = None,
     font_color: Optional[RGBColor] = None,
 ):
-    """Replace text in an existing template shape while keeping the slide layout."""
+    """Replace text in an existing template shape while keeping full, complete text.
+
+    The previous version sometimes shortened strings before they reached PowerPoint.
+    This version only applies max_chars when a caller explicitly requests it for tiny
+    fields such as score/year. For body text, it relies on small fonts, wrapping,
+    lower margins and resized template boxes so full sentences remain visible.
+    """
     if idx >= len(slide.shapes):
         return
     shape = slide.shapes[idx]
@@ -756,6 +822,12 @@ def set_shape_text(
         tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
     except Exception:
         pass
+    # Minimise internal padding so text is less likely to clip in compact template boxes.
+    for attr in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+        try:
+            setattr(tf, attr, Pt(0.5))
+        except Exception:
+            pass
     p = tf.paragraphs[0]
     p.text = value
     if font_size is not None:
@@ -768,11 +840,38 @@ def set_shape_text(
         p.alignment = align
 
 
+def resize_shape(slide, idx: int, left=None, top=None, width=None, height=None):
+    """Resize/reposition a template text box in inches to prevent clipping."""
+    if idx >= len(slide.shapes):
+        return
+    shape = slide.shapes[idx]
+    if left is not None:
+        shape.left = Inches(left)
+    if top is not None:
+        shape.top = Inches(top)
+    if width is not None:
+        shape.width = Inches(width)
+    if height is not None:
+        shape.height = Inches(height)
+
+
 def build_slide_values(profile: Dict[str, Any], company: pd.Series, brief_type: str) -> Dict[str, Any]:
     c = company.to_dict() if hasattr(company, "to_dict") else dict(company)
     company_name = str(c.get("company_name", "Company") or "Company")
-    sector = str(c.get("sector", "Sector to verify") or "Sector to verify")
-    company_type = str(c.get("company_type", "Type to verify") or "Type to verify")
+    snapshot = profile.get("company_snapshot", {}) if isinstance(profile.get("company_snapshot", {}), dict) else {}
+
+    def prefer_profile_snapshot(snapshot_key: str, company_key: str, fallback: str) -> str:
+        profile_value = str(snapshot.get(snapshot_key, "") or "").strip()
+        company_value = str(c.get(company_key, "") or "").strip()
+        unavailable_terms = {"", "not available", "not available from internal database", "nan", "none"}
+        if profile_value.lower() not in unavailable_terms:
+            return profile_value
+        if company_value.lower() not in unavailable_terms:
+            return company_value
+        return fallback
+
+    sector = prefer_profile_snapshot("sector", "sector", "Sector to verify")
+    company_type = prefer_profile_snapshot("company_type", "company_type", "Type to verify")
     relevance_score = str(c.get("relevance_score", "N/A") or "N/A")
 
     verification_banner = str(profile.get("verification_banner", "") or "").strip()
@@ -788,18 +887,18 @@ def build_slide_values(profile: Dict[str, Any], company: pd.Series, brief_type: 
         "mission": profile.get("company_positioning", "Mission / positioning to verify."),
         "growth": profile.get("growth_direction", "Growth direction to verify."),
         "target_market": profile.get("target_market", "Target market to verify."),
-        "hq": c.get("hq_location", "Not available"),
-        "founded": c.get("founded_year", "Not available"),
+        "hq": prefer_profile_snapshot("hq", "hq_location", "HQ to verify"),
+        "founded": prefer_profile_snapshot("founded", "founded_year", "Founded year to verify"),
         "type": company_type,
         "sector": sector,
-        "employees": c.get("employee_count", "Not available"),
+        "employees": prefer_profile_snapshot("employees", "employee_count", "Employees to verify"),
         "description": ((verification_banner + " ") if verification_banner else "") + str(profile.get("company_description", "Company description to verify.")),
-        "what_they_do": clean_bullets(profile.get("what_they_do"), max_items=3, max_chars=94),
-        "leadership": clean_bullets(profile.get("leadership"), max_items=3, max_chars=100),
-        "funding": clean_bullets(profile.get("funding_commercial_signals"), max_items=3, max_chars=98),
+        "what_they_do": clean_bullets(profile.get("what_they_do"), max_items=3, max_chars=None),
+        "leadership": clean_bullets(profile.get("leadership"), max_items=3, max_chars=None),
+        "funding": clean_bullets(profile.get("funding_commercial_signals"), max_items=3, max_chars=None),
         "news": clean_bullets(profile.get("latest_news_signals"), max_items=5, max_chars=None),
-        "risks": clean_bullets(profile.get("risks"), max_items=3, max_chars=108),
-        "next_steps": clean_bullets(profile.get("next_steps"), max_items=3, max_chars=108),
+        "risks": clean_bullets(profile.get("risks"), max_items=3, max_chars=None),
+        "next_steps": clean_bullets(profile.get("next_steps"), max_items=3, max_chars=None),
         "timeline": profile.get("timeline", []),
     }
 
@@ -823,6 +922,32 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
     v = build_slide_values(profile, company, brief_type)
     white = RGBColor(255, 255, 255)
 
+    # Resize the most content-heavy template text boxes so full sentences can fit.
+    # This keeps the visual style of the supplied template but gives body text more room.
+    # Top narrative cards
+    for idx in [13, 18, 23]:
+        resize_shape(slide, idx, height=0.58)
+    # Left description panel
+    resize_shape(slide, 42, height=1.35)
+    # Three feature columns
+    for idx in [48, 50, 52, 78, 80, 82]:
+        resize_shape(slide, idx, height=0.48)
+    # Leadership roles
+    for idx in [60, 64, 68]:
+        resize_shape(slide, idx, height=0.22)
+    # News rows: keep five articles, but use the full width of the news panel to avoid clipping.
+    news_rows = [88, 90, 92, 94, 96]
+    news_tops = [4.46, 4.64, 4.82, 5.00, 5.18]
+    for idx, top in zip(news_rows, news_tops):
+        resize_shape(slide, idx, left=3.54, top=top, width=9.20, height=0.20)
+    # Risks / next steps rows
+    for idx in [102, 104, 106, 112, 114, 116]:
+        resize_shape(slide, idx, height=0.28)
+    # Milestone labels: make each timeline label wider and taller.
+    milestone_lefts = [1.65, 4.08, 6.52, 8.96, 11.02]
+    for idx, left in zip([122, 125, 128, 131, 134], milestone_lefts):
+        resize_shape(slide, idx, left=left, width=1.85, height=0.34)
+
     # Header / title area — keep the template's original header colours.
     set_shape_text(slide, 2, v["company_name"], font_size=24, bold=True, max_chars=44)
     set_shape_text(slide, 3, v["subtitle"], font_size=9, max_chars=82)
@@ -832,11 +957,11 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
 
     # Top three narrative cards — these sit on coloured template boxes, so use white text.
     set_shape_text(slide, 12, "Mission / positioning", font_size=8.6, bold=True, font_color=white, max_chars=28)
-    set_shape_text(slide, 13, v["mission"], font_size=7.8, max_chars=150, font_color=white)
+    set_shape_text(slide, 13, v["mission"], font_size=5.7, font_color=white)
     set_shape_text(slide, 17, "Growth direction", font_size=8.6, bold=True, font_color=white, max_chars=28)
-    set_shape_text(slide, 18, v["growth"], font_size=7.8, max_chars=150, font_color=white)
+    set_shape_text(slide, 18, v["growth"], font_size=5.7, font_color=white)
     set_shape_text(slide, 22, "Target market", font_size=8.6, bold=True, font_color=white, max_chars=28)
-    set_shape_text(slide, 23, v["target_market"], font_size=7.8, max_chars=150, font_color=white)
+    set_shape_text(slide, 23, v["target_market"], font_size=5.7, font_color=white)
 
     # Left company snapshot panel — these values sit on the dark left panel, so use white text.
     set_shape_text(slide, 27, v["hq"], font_size=7.6, max_chars=42, font_color=white)
@@ -844,37 +969,37 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
     set_shape_text(slide, 33, v["type"], font_size=7.6, max_chars=42, font_color=white)
     set_shape_text(slide, 36, v["sector"], font_size=7.6, max_chars=46, font_color=white)
     set_shape_text(slide, 39, v["employees"], font_size=7.6, max_chars=42, font_color=white)
-    set_shape_text(slide, 42, v["description"], font_size=7.0, max_chars=430, font_color=white)
+    set_shape_text(slide, 42, v["description"], font_size=4.9, font_color=white)
 
     # What they do
     for idx, text in zip([48, 50, 52], v["what_they_do"] + ["Not available / to verify."] * 3):
-        set_shape_text(slide, idx, text, font_size=7.4, max_chars=98)
+        set_shape_text(slide, idx, text, font_size=5.0)
 
     # Leadership — only three current global leaders are shown on the slide.
     leadership = v["leadership"] + ["Leadership data to verify — Role to verify"] * 3
     for item, name_idx, role_idx in zip(leadership[:3], [59, 63, 67], [60, 64, 68]):
         name, role = split_name_role(item)
         set_shape_text(slide, name_idx, name, font_size=7.0, bold=True, max_chars=42)
-        set_shape_text(slide, role_idx, role, font_size=5.8, max_chars=58)
+        set_shape_text(slide, role_idx, role, font_size=4.8)
     # Clear the fourth leadership slot in the template.
     set_shape_text(slide, 71, "", font_size=7.0)
     set_shape_text(slide, 72, "", font_size=5.8)
 
     # Funding / commercial signals
     for idx, text in zip([78, 80, 82], v["funding"] + ["Funding / commercial signal to verify."] * 3):
-        set_shape_text(slide, idx, text, font_size=7.0, max_chars=105)
+        set_shape_text(slide, idx, text, font_size=5.0)
 
     # Latest news / signals — the template has five rows across the wide panel
     set_shape_text(slide, 86, "LATEST NEWS / SIGNALS  ·  VERIFY RELEVANCE BEFORE EXTERNAL USE", font_size=8.6, bold=True, max_chars=80)
     for idx, text in zip([88, 90, 92, 94, 96], v["news"] + ["No recent article used / verify external signals."] * 5):
         # Do not truncate article titles with ellipses; let PowerPoint shrink/wrap text to fit.
-        set_shape_text(slide, idx, text, font_size=6.1, max_chars=None)
+        set_shape_text(slide, idx, text, font_size=4.1, max_chars=None)
 
     # Risks and next steps
     for idx, text in zip([102, 104, 106], v["risks"] + ["Risk / caveat to verify."] * 3):
-        set_shape_text(slide, idx, text, font_size=6.6, max_chars=108)
+        set_shape_text(slide, idx, text, font_size=4.9)
     for idx, text in zip([112, 114, 116], v["next_steps"] + ["Next step to verify."] * 3):
-        set_shape_text(slide, idx, text, font_size=6.6, max_chars=108)
+        set_shape_text(slide, idx, text, font_size=4.9)
 
     # Timeline / milestones
     timeline = v["timeline"] if isinstance(v["timeline"], list) else []
@@ -888,7 +1013,7 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
         if not isinstance(item, dict):
             item = {"year": "", "text": str(item)}
         set_shape_text(slide, year_idx, item.get("year", ""), font_size=7.2, bold=True, align=PP_ALIGN.CENTER, max_chars=8)
-        set_shape_text(slide, text_idx, item.get("text", ""), font_size=4.8, align=PP_ALIGN.CENTER, max_chars=None)
+        set_shape_text(slide, text_idx, item.get("text", ""), font_size=3.7, align=PP_ALIGN.CENTER, max_chars=None)
 
     footer_text = "AI-generated first draft — funding, leadership and news signals require human verification before external use."
     if v.get("verification_banner"):
@@ -897,7 +1022,7 @@ def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Se
         slide,
         135,
         footer_text,
-        font_size=6.8,
+        font_size=5.9,
         align=PP_ALIGN.RIGHT,
     )
 
@@ -996,6 +1121,9 @@ if st.button("Generate one-pager", type="primary"):
         latest_articles = get_latest_company_articles(selected_company.get("company_name", company_query), max_articles=5) if include_latest_news else []
         internal_leadership_missing = intel.get("leadership", pd.DataFrame()).empty
         live_leadership_lookup = ""
+        live_company_profile_lookup = ""
+        if provider == "OpenAI" and not has_internal_match:
+            live_company_profile_lookup = lookup_current_company_profile(str(selected_company.get("company_name", company_query)))
         if provider == "OpenAI" and internal_leadership_missing:
             live_leadership_lookup = lookup_current_global_leadership(str(selected_company.get("company_name", company_query)))
         source_pack = build_source_pack(
@@ -1008,6 +1136,7 @@ if st.button("Generate one-pager", type="primary"):
             has_internal_match=has_internal_match,
             match_message=match_message,
             live_leadership_lookup=live_leadership_lookup,
+            live_company_profile_lookup=live_company_profile_lookup,
         )
 
     base_profile = default_profile_sections(selected_company, selected_project, intel, latest_articles)

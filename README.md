@@ -174,3 +174,18 @@ As before, latest news, leadership, funding and milestone information should be 
 - News rows are no longer truncated with ellipses by the app; PowerPoint text fitting is used instead.
 - The prompt now explicitly warns that the OpenAI model has a fixed training cutoff. Current leadership, CEO, funding, valuation and recent announcements should be treated as verification-sensitive unless supported by the internal database, user-provided context or latest RSS/news.
 - If no internal milestones are found, the model is instructed to create short, specific timeline milestones such as founding year, product launches, funding rounds, public listings, acquisitions or recent announcements, and to avoid generic wording such as “growth continues”.
+
+## Latest fixes: text fitting and unknown-company snapshot fields
+
+- App-level ellipsis/truncation has been reduced so generated slide text is not intentionally shortened before being placed into PowerPoint.
+- The prompt now asks for complete sentences rather than fragments, while still keeping the wording concise enough for a one-page slide.
+- For companies not found in the internal database, the app now runs a live OpenAI web-search-assisted company profile lookup when an OpenAI key is available. This lookup is used to populate the left-hand snapshot fields such as HQ, founded year, company type, sector and employee scale.
+- The PowerPoint mapping now includes a `company_snapshot` JSON object so the LLM can fill HQ/founded/type/sector/employees when internal database values are unavailable.
+- Left-side snapshot values still use white font for readability on the dark panel, while the slide header keeps the original template colour settings.
+- Longer descriptions, news titles, risks and next steps are passed through without app-added ellipses. PowerPoint text fitting is used instead, with smaller font sizes for dense sections.
+
+
+
+## Text fitting and complete-sentence output
+
+The PowerPoint template has fixed-size text boxes, so the app now avoids app-level ellipses and asks the model for compact complete sentences rather than fragments. The app also resizes dense template fields at generation time, lowers font sizes in crowded sections, and uses the company-profile web lookup to populate HQ, founded year, type, sector and employee scale when the internal database has no values. For a true one-page output, long paragraphs are still intentionally constrained by the prompt, but they should appear as complete sentences rather than cut-off text.
