@@ -232,13 +232,25 @@ def build_source_pack(
     retrieved_notes: List[str],
     latest_articles: List[Dict[str, str]],
     intel: Dict[str, pd.DataFrame],
+    has_internal_match: bool = True,
+    match_message: str = "",
 ) -> str:
     company_context = "\n".join([f"- {col}: {selected_company[col]}" for col in selected_company.index])
     project_context = "\n".join([f"- {col}: {selected_project[col]}" for col in selected_project.index])
     note_context = "\n\n".join(retrieved_notes) if retrieved_notes else "No relevant local notes found."
     latest_news_context = format_articles_for_prompt(latest_articles)
+    database_status = (
+        "Internal database match found. Use internal structured records as the primary evidence."
+        if has_internal_match
+        else "NO INTERNAL DATABASE MATCH FOUND. The company was not found in the internal database. Fill only what can be supported from user context, local notes, latest news/RSS and very high-confidence general knowledge; add a clear verification warning at the beginning of the output."
+    )
 
     return f"""
+INTERNAL DATABASE MATCH STATUS
+- has_internal_match: {has_internal_match}
+- match_message: {match_message}
+- instruction: {database_status}
+
 STRUCTURED COMPANY DATA
 {company_context}
 
@@ -284,8 +296,12 @@ Your job is to turn the source pack into a concise, evidence-grounded PowerPoint
 You are not writing marketing copy. You are creating a practical business briefing that a human can review, edit and use.
 
 Core rules:
-- Use ONLY the information in the source pack.
-- Do not invent facts, numbers, partnerships, products, leaders, dates or financials.
+- First check the INTERNAL DATABASE MATCH STATUS in the source pack.
+- If an internal database match is available, use the internal structured records as the primary evidence.
+- If no internal database match is available, still produce a useful first draft by using the user context, local notes if any, latest news/RSS if included, and only very high-confidence general company knowledge.
+- If no internal database match is available, include this exact warning in the `verification_banner` field: "Not found in the internal database — this profile uses external/contextual information and needs additional verification."
+- Never invent facts, numbers, partnerships, products, leaders, dates or financials.
+- Only include information that is directly supported by the source pack or is very broadly known and stable; otherwise write "to verify" or "not available".
 - If the source pack is incomplete, say what is missing or what needs verification.
 - Treat private-company funding, valuation and revenue references as funding/commercial signals, not as audited financial performance.
 - Separate facts from interpretation. Do not make weak evidence sound definitive.
@@ -313,6 +329,7 @@ Return ONLY valid JSON. Do not include markdown, commentary, citations outside t
 Use exactly this schema and keep each field concise enough to fit a single PowerPoint slide:
 {{
   "headline": "short title for the profile",
+  "verification_banner": "use an empty string if the company was found in the internal database; otherwise include the required not-in-database verification warning",
   "company_positioning": "1-2 sentences on mission, positioning and differentiation",
   "growth_direction": "1-2 sentences on likely growth direction or strategic direction, based only on the source pack",
   "target_market": "1-2 sentences on target users/customers/market",
@@ -333,7 +350,8 @@ Use exactly this schema and keep each field concise enough to fit a single Power
 }}
 
 Field-specific instructions:
-- "leadership": include named executives only if they appear in the source pack. If leadership is missing, write "Leadership data to verify".
+- "verification_banner": if no internal database match is available, this must be the first visible message in the profile. If there is an internal match, leave it blank.
+- "leadership": include named executives only if they appear in the source pack or are very high-confidence general knowledge. If leadership is missing or uncertain, write "Leadership data to verify".
 - "funding_commercial_signals": for private companies, use language such as "reported", "funding signal", "commercial signal", or "to verify" where appropriate.
 - "latest_news_signals": include only relevant recent items. If the retrieved articles are weak, duplicated, irrelevant or missing, write that recent external signals require verification.
 - "risks": include both information-quality risks and business risks where relevant.
@@ -367,6 +385,7 @@ Rules:
 - Do not introduce new facts.
 - Be concise, direct and useful.
 - Treat latest news as signals to verify, not definitive evidence.
+- If the company was not found in the internal database, check that the profile clearly starts with the not-in-database verification warning.
 
 SOURCE PACK:
 {source_pack}
@@ -476,8 +495,12 @@ def default_profile_sections(company: pd.Series, project: pd.Series, intel: Dict
     if not latest_news:
         latest_news = ["Latest external news was excluded or unavailable.", "Use internal records and analyst notes as the primary evidence."]
 
+    no_internal_match = str(c.get("company_id", "")) == "external_query"
+    verification_banner = "Not found in the internal database — this profile uses external/contextual information and needs additional verification." if no_internal_match else ""
+
     return {
         "headline": f"One Page Company Profile: {c.get('company_name', 'Company')}",
+        "verification_banner": verification_banner,
         "company_positioning": str(c.get("mission", "Mission not available.")),
         "growth_direction": str(c.get("expansion_signal", "Growth direction needs to be verified.")),
         "target_market": str(c.get("target_market", project.get("target_sector", "Target market to be confirmed."))),
@@ -536,6 +559,8 @@ def profile_to_markdown(profile: Dict[str, Any]) -> str:
     return f"""
 # {profile.get('headline', 'One Page Company Profile')}
 
+{('> **Verification note:** ' + profile.get('verification_banner', '') + '\n') if profile.get('verification_banner') else ''}
+
 ## Mission & positioning
 {profile.get('company_positioning', '')}
 
@@ -577,152 +602,195 @@ def profile_to_markdown(profile: Dict[str, Any]) -> str:
 # -----------------------------
 # PowerPoint generation layer
 # -----------------------------
-def add_textbox(slide, x, y, w, h, text="", font_size=10, bold=False, color=None, align=None):
-    box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
-    tf = box.text_frame
+# The app now uses the uploaded PowerPoint as the actual output template.
+# Keep this file in the repository root when deploying to Streamlit Cloud.
+def resolve_template_path() -> Optional[Path]:
+    candidates = [
+        BASE / "one_pager_template.pptx",
+        BASE / "templates" / "one_pager_template.pptx",
+        BASE / "Anthropic_One_Pager_v2 (1).pptx",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def truncate_text(text: Any, max_chars: int = 180) -> str:
+    value = str(text or "").strip()
+    value = re.sub(r"\s+", " ", value)
+    if len(value) <= max_chars:
+        return value
+    return value[: max_chars - 1].rstrip() + "…"
+
+
+def clean_bullets(value: Any, max_items: int = 5, max_chars: int = 130) -> List[str]:
+    return [truncate_text(item, max_chars=max_chars) for item in as_list(value, max_items=max_items)]
+
+
+def split_name_role(value: str) -> tuple[str, str]:
+    value = str(value or "").strip()
+    for sep in [" — ", " – ", " - ", ";"]:
+        if sep in value:
+            left, right = value.split(sep, 1)
+            return truncate_text(left, 42), truncate_text(right, 56)
+    return truncate_text(value, 42), "Role / relevance to verify"
+
+
+def set_shape_text(slide, idx: int, text: Any, font_size: Optional[float] = None, bold: Optional[bool] = None, align=None, max_chars: Optional[int] = None):
+    """Replace text in an existing template shape while keeping the slide layout."""
+    if idx >= len(slide.shapes):
+        return
+    shape = slide.shapes[idx]
+    if not hasattr(shape, "text_frame"):
+        return
+    value = truncate_text(text, max_chars=max_chars) if max_chars else str(text or "")
+    tf = shape.text_frame
     tf.clear()
     tf.word_wrap = True
-    tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+    try:
+        tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+    except Exception:
+        pass
     p = tf.paragraphs[0]
-    p.text = str(text)
-    p.font.size = Pt(font_size)
-    p.font.bold = bold
-    if color:
-        p.font.color.rgb = color
-    if align:
-        p.alignment = align
-    return box
-
-
-def add_bullet_box(slide, x, y, w, h, items, font_size=8.2, color=None, max_items=4):
-    box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
-    tf = box.text_frame
-    tf.clear()
-    tf.word_wrap = True
-    tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
-    items = as_list(items, max_items=max_items) or ["Not available / to verify."]
-    for i, item in enumerate(items):
-        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        p.text = str(item)
+    p.text = value
+    if font_size is not None:
         p.font.size = Pt(font_size)
-        if color:
-            p.font.color.rgb = color
-        p.level = 0
-        p.space_after = Pt(2)
-    return box
+    if bold is not None:
+        p.font.bold = bold
+    if align is not None:
+        p.alignment = align
 
 
-def add_card(slide, x, y, w, h, title, body_items, icon_text="", max_items=4):
-    navy = RGBColor(25, 52, 78)
-    teal = RGBColor(79, 161, 190)
-    dark = RGBColor(45, 55, 65)
-    circle = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(x), Inches(y + 0.05), Inches(0.42), Inches(0.42))
-    circle.fill.solid(); circle.fill.fore_color.rgb = teal; circle.line.fill.background()
-    add_textbox(slide, x + 0.07, y + 0.14, 0.28, 0.16, icon_text, font_size=7.5, bold=True, color=RGBColor(255, 255, 255), align=PP_ALIGN.CENTER)
-    add_textbox(slide, x + 0.55, y, w - 0.55, 0.35, title, font_size=11.5, bold=True, color=navy)
-    add_bullet_box(slide, x + 0.55, y + 0.42, w - 0.55, h - 0.42, body_items, font_size=7.8, color=dark, max_items=max_items)
+def build_slide_values(profile: Dict[str, Any], company: pd.Series, brief_type: str) -> Dict[str, Any]:
+    c = company.to_dict() if hasattr(company, "to_dict") else dict(company)
+    company_name = str(c.get("company_name", "Company") or "Company")
+    sector = str(c.get("sector", "Sector to verify") or "Sector to verify")
+    company_type = str(c.get("company_type", "Type to verify") or "Type to verify")
+    relevance_score = str(c.get("relevance_score", "N/A") or "N/A")
+
+    verification_banner = str(profile.get("verification_banner", "") or "").strip()
+    if str(c.get("company_id", "")) == "external_query" and not verification_banner:
+        verification_banner = "Not found in the internal database — this profile uses external/contextual information and needs additional verification."
+
+    return {
+        "company_name": company_name,
+        "verification_banner": verification_banner,
+        "subtitle": (f"{brief_type}  ·  {sector}" if not verification_banner else f"{brief_type}  ·  External profile — verify"),
+        "company_type": company_type,
+        "score": relevance_score,
+        "mission": profile.get("company_positioning", "Mission / positioning to verify."),
+        "growth": profile.get("growth_direction", "Growth direction to verify."),
+        "target_market": profile.get("target_market", "Target market to verify."),
+        "hq": c.get("hq_location", "Not available"),
+        "founded": c.get("founded_year", "Not available"),
+        "type": company_type,
+        "sector": sector,
+        "employees": c.get("employee_count", "Not available"),
+        "description": ((verification_banner + " ") if verification_banner else "") + str(profile.get("company_description", "Company description to verify.")),
+        "what_they_do": clean_bullets(profile.get("what_they_do"), max_items=3, max_chars=94),
+        "leadership": clean_bullets(profile.get("leadership"), max_items=4, max_chars=100),
+        "funding": clean_bullets(profile.get("funding_commercial_signals"), max_items=3, max_chars=98),
+        "news": clean_bullets(profile.get("latest_news_signals"), max_items=5, max_chars=112),
+        "risks": clean_bullets(profile.get("risks"), max_items=3, max_chars=108),
+        "next_steps": clean_bullets(profile.get("next_steps"), max_items=3, max_chars=108),
+        "timeline": profile.get("timeline", []),
+    }
 
 
 def add_profile_pptx(profile: Dict[str, Any], company: pd.Series, project: pd.Series) -> BytesIO:
-    prs = Presentation()
-    prs.slide_width = Inches(13.333)
-    prs.slide_height = Inches(7.5)
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    """Populate the provided one-page PowerPoint template for any company.
 
-    navy = RGBColor(18, 47, 76)
-    deep_blue = RGBColor(22, 63, 101)
-    teal = RGBColor(79, 161, 190)
-    light_blue = RGBColor(223, 237, 244)
-    light_grey = RGBColor(242, 242, 242)
-    mid_grey = RGBColor(220, 225, 230)
-    dark = RGBColor(37, 49, 59)
-    white = RGBColor(255, 255, 255)
+    The template is a single-slide company profile. The app keeps the design,
+    shapes, icons and layout from the template, and only replaces the text fields
+    with AI-generated structured content.
+    """
+    template_path = resolve_template_path()
+    if template_path is None:
+        raise FileNotFoundError(
+            "PowerPoint template not found. Upload one_pager_template.pptx to the same GitHub folder as app.py."
+        )
 
-    bg = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(13.333), Inches(7.5))
-    bg.fill.solid(); bg.fill.fore_color.rgb = white; bg.line.fill.background()
+    prs = Presentation(str(template_path))
+    slide = prs.slides[0]
+    brief_type = str(project.get("project_name", "Company brief")) if hasattr(project, "get") else "Company brief"
+    v = build_slide_values(profile, company, brief_type)
 
-    top_bg = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(13.333), Inches(1.55))
-    top_bg.fill.solid(); top_bg.fill.fore_color.rgb = light_blue; top_bg.line.fill.background()
-    for x, width in [(5.7, 0.15), (6.35, 0.09), (7.1, 0.12), (7.8, 0.08), (8.45, 0.12), (9.4, 0.10), (10.0, 0.12), (10.9, 0.10), (11.7, 0.12)]:
-        line = slide.shapes.add_shape(MSO_SHAPE.PARALLELOGRAM, Inches(x), Inches(0), Inches(width), Inches(1.55))
-        line.fill.solid(); line.fill.fore_color.rgb = RGBColor(175, 205, 220); line.line.fill.background()
+    # Header / title area
+    set_shape_text(slide, 2, v["company_name"], font_size=24, bold=True, max_chars=44)
+    set_shape_text(slide, 3, v["subtitle"], font_size=9, max_chars=82)
+    set_shape_text(slide, 5, v["company_type"], font_size=8.5, align=PP_ALIGN.CENTER, max_chars=42)
+    set_shape_text(slide, 7, v["score"], font_size=20, bold=True, align=PP_ALIGN.CENTER, max_chars=5)
+    set_shape_text(slide, 8, "SCORE", font_size=6.5, bold=True, align=PP_ALIGN.CENTER)
 
-    add_textbox(slide, 0.45, 0.25, 4.9, 0.45, "ONE PAGE COMPANY PROFILE", font_size=22, bold=False, color=navy)
-    add_textbox(slide, 0.47, 0.74, 4.6, 0.2, str(profile.get("headline", "AI-generated business brief")), font_size=8.8, color=dark)
+    # Top three narrative cards
+    set_shape_text(slide, 13, v["mission"], font_size=7.8, max_chars=150)
+    set_shape_text(slide, 18, v["growth"], font_size=7.8, max_chars=150)
+    set_shape_text(slide, 23, v["target_market"], font_size=7.8, max_chars=150)
 
-    ribbon = slide.shapes.add_shape(MSO_SHAPE.PARALLELOGRAM, Inches(2.45), Inches(1.05), Inches(10.55), Inches(1.05))
-    ribbon.fill.solid(); ribbon.fill.fore_color.rgb = deep_blue; ribbon.line.fill.background()
+    # Left company snapshot panel
+    set_shape_text(slide, 27, v["hq"], font_size=7.6, max_chars=42)
+    set_shape_text(slide, 30, v["founded"], font_size=7.6, max_chars=18)
+    set_shape_text(slide, 33, v["type"], font_size=7.6, max_chars=42)
+    set_shape_text(slide, 36, v["sector"], font_size=7.6, max_chars=46)
+    set_shape_text(slide, 39, v["employees"], font_size=7.6, max_chars=42)
+    set_shape_text(slide, 42, v["description"], font_size=7.2, max_chars=430)
 
-    top_sections = [
-        (3.65, "M", "Mission / positioning", profile.get("company_positioning", "")),
-        (6.75, "G", "Growth direction", profile.get("growth_direction", "")),
-        (9.85, "T", "Target market", profile.get("target_market", "")),
-    ]
-    for x, icon, title, body in top_sections:
-        circ = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(x), Inches(1.31), Inches(0.52), Inches(0.52))
-        circ.fill.solid(); circ.fill.fore_color.rgb = teal; circ.line.fill.background()
-        add_textbox(slide, x + 0.11, 1.43, 0.30, 0.18, icon, font_size=8.5, bold=True, color=white, align=PP_ALIGN.CENTER)
-        add_textbox(slide, x + 0.65, 1.25, 2.1, 0.24, title, font_size=11.2, bold=True, color=white)
-        add_textbox(slide, x + 0.65, 1.53, 2.25, 0.48, str(body), font_size=7.6, color=white)
+    # What they do
+    for idx, text in zip([48, 50, 52], v["what_they_do"] + ["Not available / to verify."] * 3):
+        set_shape_text(slide, idx, text, font_size=7.4, max_chars=98)
 
-    panel = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.48), Inches(2.35), Inches(2.85), Inches(4.65))
-    panel.fill.solid(); panel.fill.fore_color.rgb = deep_blue; panel.line.fill.background()
+    # Leadership — separate name and role lines
+    leadership = v["leadership"] + ["Leadership data to verify — Role to verify"] * 4
+    for item, name_idx, role_idx in zip(leadership[:4], [59, 63, 67, 71], [60, 64, 68, 72]):
+        name, role = split_name_role(item)
+        set_shape_text(slide, name_idx, name, font_size=7.0, bold=True, max_chars=42)
+        set_shape_text(slide, role_idx, role, font_size=5.8, max_chars=58)
 
-    facts = [
-        ("Company", company.get("company_name", "N/A")),
-        ("HQ", company.get("hq_location", "N/A")),
-        ("Founded", company.get("founded_year", "N/A")),
-        ("Type", company.get("company_type", "N/A")),
-        ("Sector", company.get("sector", "N/A")),
-        ("Employees", company.get("employee_count", "N/A")),
-        ("Score", company.get("relevance_score", "N/A")),
-    ]
-    y = 2.52
-    for label, value in facts:
-        add_textbox(slide, 0.66, y, 0.80, 0.22, label, font_size=7.2, bold=True, color=white)
-        add_textbox(slide, 1.50, y, 1.55, 0.22, str(value), font_size=6.9, color=white, align=PP_ALIGN.RIGHT)
-        divider = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.66), Inches(y + 0.28), Inches(2.38), Inches(0.01))
-        divider.fill.solid(); divider.fill.fore_color.rgb = RGBColor(170, 190, 205); divider.line.fill.background()
-        y += 0.38
+    # Funding / commercial signals
+    for idx, text in zip([78, 80, 82], v["funding"] + ["Funding / commercial signal to verify."] * 3):
+        set_shape_text(slide, idx, text, font_size=7.0, max_chars=105)
 
-    add_textbox(slide, 0.68, 5.55, 2.25, 0.3, "Company description", font_size=11.2, bold=True, color=white)
-    add_textbox(slide, 0.68, 5.92, 2.25, 0.82, profile.get("company_description", ""), font_size=7.8, color=white)
+    # Latest news / signals — the template has five rows across the wide panel
+    set_shape_text(slide, 86, "LATEST NEWS / SIGNALS  ·  VERIFY RELEVANCE BEFORE EXTERNAL USE", font_size=8.6, bold=True, max_chars=80)
+    for idx, text in zip([88, 90, 92, 94, 96], v["news"] + ["No recent article used / verify external signals."] * 5):
+        set_shape_text(slide, idx, text, font_size=6.9, max_chars=114)
 
-    add_card(slide, 3.65, 2.35, 2.75, 1.20, "What they do", profile.get("what_they_do"), "W", max_items=3)
-    add_card(slide, 6.85, 2.35, 2.75, 1.20, "Executive leadership", profile.get("leadership"), "E", max_items=4)
-    add_card(slide, 10.05, 2.35, 2.80, 1.20, "Funding / commercial", profile.get("funding_commercial_signals"), "F", max_items=3)
+    # Risks and next steps
+    for idx, text in zip([102, 104, 106], v["risks"] + ["Risk / caveat to verify."] * 3):
+        set_shape_text(slide, idx, text, font_size=6.6, max_chars=108)
+    for idx, text in zip([112, 114, 116], v["next_steps"] + ["Next step to verify."] * 3):
+        set_shape_text(slide, idx, text, font_size=6.6, max_chars=108)
 
-    add_card(slide, 3.65, 3.88, 2.75, 1.25, "Latest news / signals", profile.get("latest_news_signals"), "L", max_items=3)
-    add_card(slide, 6.85, 3.88, 2.75, 1.25, "Risks / verify", profile.get("risks"), "R", max_items=3)
-    add_card(slide, 10.05, 3.88, 2.80, 1.25, "Next steps", profile.get("next_steps"), "N", max_items=3)
-
-    add_textbox(slide, 3.65, 5.55, 3.3, 0.3, "Company milestones / signals", font_size=12.5, bold=True, color=navy)
-    timeline_bg = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(3.65), Inches(5.92), Inches(9.2), Inches(1.10))
-    timeline_bg.fill.solid(); timeline_bg.fill.fore_color.rgb = light_grey; timeline_bg.line.color.rgb = mid_grey
-
-    timeline = profile.get("timeline", [])
-    if not isinstance(timeline, list) or not timeline:
+    # Timeline / milestones
+    timeline = v["timeline"] if isinstance(v["timeline"], list) else []
+    if not timeline:
         timeline = [{"year": "TBC", "text": "Milestones to verify"}]
     timeline = timeline[:5]
-    x_positions = [4.15, 5.95, 7.75, 9.55, 11.35]
-    line = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(4.4), Inches(6.36), Inches(6.95), Inches(0.025))
-    line.fill.solid(); line.fill.fore_color.rgb = teal; line.line.fill.background()
-    for i, item in enumerate(timeline):
+    year_shapes = [121, 124, 127, 130, 133]
+    text_shapes = [122, 125, 128, 131, 134]
+    for i, (year_idx, text_idx) in enumerate(zip(year_shapes, text_shapes)):
+        item = timeline[i] if i < len(timeline) else {"year": "", "text": ""}
         if not isinstance(item, dict):
-            item = {"year": str(2023 + i), "text": str(item)}
-        x = x_positions[i]
-        add_textbox(slide, x - 0.25, 6.05, 0.9, 0.25, item.get("year", str(2023 + i)), font_size=10.5, bold=True, color=navy, align=PP_ALIGN.CENTER)
-        dot = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(x), Inches(6.30), Inches(0.16), Inches(0.16))
-        dot.fill.solid(); dot.fill.fore_color.rgb = white; dot.line.color.rgb = teal; dot.line.width = Pt(2)
-        add_textbox(slide, x - 0.48, 6.52, 1.12, 0.36, item.get("text", ""), font_size=6.5, color=dark, align=PP_ALIGN.CENTER)
+            item = {"year": "", "text": str(item)}
+        set_shape_text(slide, year_idx, item.get("year", ""), font_size=7.2, bold=True, align=PP_ALIGN.CENTER, max_chars=8)
+        set_shape_text(slide, text_idx, item.get("text", ""), font_size=5.5, align=PP_ALIGN.CENTER, max_chars=58)
 
-    add_textbox(slide, 0.48, 7.18, 12.35, 0.16, "AI-generated first draft — funding, leadership and news signals require human verification before external use.", font_size=7.2, color=RGBColor(90, 90, 90), align=PP_ALIGN.RIGHT)
+    footer_text = "AI-generated first draft — funding, leadership and news signals require human verification before external use."
+    if v.get("verification_banner"):
+        footer_text = v["verification_banner"] + " Human review required before use."
+    set_shape_text(
+        slide,
+        135,
+        footer_text,
+        font_size=6.8,
+        align=PP_ALIGN.RIGHT,
+    )
 
     pptx_io = BytesIO()
     prs.save(pptx_io)
     pptx_io.seek(0)
     return pptx_io
-
 
 # -----------------------------
 # Streamlit UI
@@ -811,7 +879,16 @@ if st.button("Generate one-pager", type="primary"):
 
     with st.spinner("Retrieving latest news signals..." if include_latest_news else "Preparing source pack..."):
         latest_articles = get_latest_company_articles(selected_company.get("company_name", company_query), max_articles=5) if include_latest_news else []
-        source_pack = build_source_pack(selected_company, selected_project, extra_notes, retrieved_notes, latest_articles, intel)
+        source_pack = build_source_pack(
+            selected_company,
+            selected_project,
+            extra_notes,
+            retrieved_notes,
+            latest_articles,
+            intel,
+            has_internal_match=has_internal_match,
+            match_message=match_message,
+        )
 
     base_profile = default_profile_sections(selected_company, selected_project, intel, latest_articles)
     with st.spinner("Drafting structured profile..."):
