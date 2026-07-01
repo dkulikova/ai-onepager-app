@@ -1,4 +1,4 @@
-# AI Business Briefing Assistant
+# BriefIQ
 
 A Streamlit prototype that turns a free-text company request into an editable PowerPoint one-pager using a fixed client-ready PowerPoint template.
 
